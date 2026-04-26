@@ -36,6 +36,7 @@ libloading = "0.8.1"
 uuid = { version = "1.6.1", features = ["v4"] }
 hidapi = { version = "2.6.5", optional = true }
 hex = "0.4.3"
+sha2 = "0.10"
 
 [features]
 hardware-wallet = ["dep:hidapi"]

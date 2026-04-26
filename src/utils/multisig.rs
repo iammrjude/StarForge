@@ -1,6 +1,8 @@
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use stellar_strkey::ed25519::PublicKey as StellarPublicKey;
+use std::fs;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct MultiSigAccount {
@@ -60,6 +62,64 @@ pub enum TransactionStatus {
     ReadyToSubmit,
     Submitted,
     Failed,
+}
+
+fn multisig_dir() -> Result<PathBuf> {
+    let dir = crate::utils::config::get_data_dir()?.join("multisig");
+    if !dir.exists() {
+        fs::create_dir_all(&dir).with_context(|| format!("Failed to create {}", dir.display()))?;
+    }
+    Ok(dir)
+}
+
+fn account_path(name: &str) -> Result<PathBuf> {
+    Ok(multisig_dir()?.join(format!("{}.json", name)))
+}
+
+pub fn save_account(account: &MultiSigAccount) -> Result<()> {
+    let path = account_path(&account.name)?;
+    fs::write(&path, serde_json::to_string_pretty(account)?)
+        .with_context(|| format!("Failed to write {}", path.display()))?;
+    Ok(())
+}
+
+pub fn load_account(name: &str) -> Result<MultiSigAccount> {
+    let path = account_path(name)?;
+    let s = fs::read_to_string(&path).with_context(|| format!("Failed to read {}", path.display()))?;
+    let acct: MultiSigAccount =
+        serde_json::from_str(&s).with_context(|| format!("Failed to parse {}", path.display()))?;
+    Ok(acct)
+}
+
+pub fn list_accounts() -> Result<Vec<MultiSigAccount>> {
+    let dir = multisig_dir()?;
+    let mut out = Vec::new();
+    for entry in fs::read_dir(&dir).with_context(|| format!("Failed to read {}", dir.display()))? {
+        let entry = entry?;
+        let path = entry.path();
+        if path.extension().and_then(|e| e.to_str()) != Some("json") {
+            continue;
+        }
+        let Ok(s) = fs::read_to_string(&path) else { continue };
+        if let Ok(acct) = serde_json::from_str::<MultiSigAccount>(&s) {
+            out.push(acct);
+        }
+    }
+    out.sort_by(|a, b| a.name.cmp(&b.name));
+    Ok(out)
+}
+
+pub fn load_transaction(path: &Path) -> Result<MultiSigTransaction> {
+    let s = fs::read_to_string(path).with_context(|| format!("Failed to read {}", path.display()))?;
+    let tx: MultiSigTransaction =
+        serde_json::from_str(&s).with_context(|| format!("Failed to parse {}", path.display()))?;
+    Ok(tx)
+}
+
+pub fn save_transaction(path: &Path, tx: &MultiSigTransaction) -> Result<()> {
+    fs::write(path, serde_json::to_string_pretty(tx)?)
+        .with_context(|| format!("Failed to write {}", path.display()))?;
+    Ok(())
 }
 
 pub fn validate_signer(public_key: &str) -> Result<()> {
@@ -143,6 +203,9 @@ pub fn add_signature_to_transaction(
     };
 
     tx.signatures.push(sig);
+
+    // Best-effort tracking; callers should keep `current_weight` coherent.
+    tx.current_weight = tx.signatures.len().min(u8::MAX as usize) as u8;
 
     // Update status
     if check_transaction_ready(tx) {

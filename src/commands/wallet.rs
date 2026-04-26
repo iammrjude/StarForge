@@ -6,6 +6,7 @@ use colored::*;
 use ed25519_dalek::{Signer, SigningKey};
 use rand::RngCore;
 use stellar_strkey::ed25519::{PrivateKey as StellarPrivateKey, PublicKey as StellarPublicKey};
+use std::path::PathBuf;
 
 #[derive(Subcommand)]
 pub enum WalletCommands {
@@ -72,57 +73,41 @@ pub enum WalletCommands {
 
 #[derive(Subcommand)]
 pub enum MultisigCommands {
-    /// Create a new multi-signature account configuration
+    /// Create a multi-sig config for an existing wallet
+    ///
+    /// Example:
+    /// starforge wallet multisig create treasury --threshold 2 --signers alice,bob,charlie
     Create {
-        /// Name for this multi-sig account
+        /// Wallet name to treat as the multi-sig account (e.g. "treasury")
         name: String,
-        /// Account ID (public key)
-        account_id: String,
-        /// Network (testnet or mainnet)
-        #[arg(long, default_value = "testnet")]
-        network: String,
-    },
-    /// Add a signer to a multi-sig account
-    AddSigner {
-        /// Multi-sig account name
-        account: String,
-        /// Signer public key
-        public_key: String,
-        /// Signer weight (1-255)
-        #[arg(long, default_value = "1")]
-        weight: u8,
-        /// Optional friendly name for this signer
+        /// Required weight threshold to submit
         #[arg(long)]
-        name: Option<String>,
-    },
-    /// Remove a signer from a multi-sig account
-    RemoveSigner {
-        /// Multi-sig account name
-        account: String,
-        /// Signer public key to remove
-        public_key: String,
-    },
-    /// Set thresholds for a multi-sig account
-    SetThresholds {
-        /// Multi-sig account name
-        account: String,
-        /// Low threshold (for low-security operations)
+        threshold: u8,
+        /// Comma-separated wallet names to act as signers (e.g. alice,bob,charlie)
         #[arg(long)]
-        low: Option<u8>,
-        /// Medium threshold (for medium-security operations)
+        signers: String,
+        /// Override network for this config
         #[arg(long)]
-        medium: Option<u8>,
-        /// High threshold (for high-security operations like changing signers)
-        #[arg(long)]
-        high: Option<u8>,
+        network: Option<String>,
     },
-    /// List all multi-sig accounts
+    /// Sign a multi-sig transaction JSON with all available local signer keys
+    ///
+    /// Example:
+    /// starforge wallet multisig sign treasury --transaction tx.json
+    Sign {
+        /// Multi-sig account name (created via `multisig create`)
+        name: String,
+        /// Path to a MultiSigTransaction JSON file
+        #[arg(long)]
+        transaction: PathBuf,
+        /// Output file (defaults to in-place update)
+        #[arg(long)]
+        output: Option<PathBuf>,
+    },
+    /// List multi-sig accounts stored locally
     List,
-    /// Show details of a multi-sig account
-    Show {
-        /// Multi-sig account name
-        name: String,
-    },
+    /// Show a stored multi-sig account
+    Show { name: String },
 }
 
 pub fn handle(cmd: WalletCommands) -> Result<()> {
@@ -485,243 +470,164 @@ mod tests {
 
 fn handle_multisig(cmd: MultisigCommands) -> Result<()> {
     match cmd {
-        MultisigCommands::Create { name, account_id, network } => {
-            multisig_create(name, account_id, network)
-        }
-        MultisigCommands::AddSigner { account, public_key, weight, name } => {
-            multisig_add_signer(account, public_key, weight, name)
-        }
-        MultisigCommands::RemoveSigner { account, public_key } => {
-            multisig_remove_signer(account, public_key)
-        }
-        MultisigCommands::SetThresholds { account, low, medium, high } => {
-            multisig_set_thresholds(account, low, medium, high)
-        }
+        MultisigCommands::Create { name, threshold, signers, network } => multisig_create(name, threshold, signers, network),
+        MultisigCommands::Sign { name, transaction, output } => multisig_sign(name, transaction, output),
         MultisigCommands::List => multisig_list(),
         MultisigCommands::Show { name } => multisig_show(name),
     }
 }
 
-fn multisig_create(name: String, account_id: String, network: String) -> Result<()> {
+fn multisig_create(name: String, threshold: u8, signers: String, network: Option<String>) -> Result<()> {
     config::validate_wallet_name(&name)?;
-    config::validate_public_key(&account_id)?;
+    multisig::validate_threshold(threshold)?;
+
+    let cfg = config::load()?;
+    let wallet = cfg
+        .wallets
+        .iter()
+        .find(|w| w.name == name)
+        .ok_or_else(|| anyhow::anyhow!("Wallet '{}' not found. Create it first with `starforge wallet create {}`", name, name))?;
+
+    let network = network.unwrap_or_else(|| wallet.network.clone());
     config::validate_network(&network)?;
 
-    let mut cfg = config::load()?;
+    let signer_names: Vec<String> = signers
+        .split(',')
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
 
-    // Check if multisig account already exists
-    if let Some(multisig_accounts) = cfg.wallets.iter().find(|w| w.name == format!("multisig_{}", name)) {
-        anyhow::bail!("Multi-sig account '{}' already exists", name);
+    if signer_names.is_empty() {
+        anyhow::bail!("Provide at least one signer wallet via --signers alice,bob,...");
     }
 
-    p::header(&format!("Creating multi-sig account '{}'", name));
+    let mut signer_entries = Vec::new();
+    for signer_name in signer_names {
+        config::validate_wallet_name(&signer_name)?;
+        let signer_wallet = cfg.wallets.iter().find(|w| w.name == signer_name).ok_or_else(|| {
+            anyhow::anyhow!("Signer wallet '{}' not found in local config", signer_name)
+        })?;
+        signer_entries.push(multisig::Signer {
+            public_key: signer_wallet.public_key.clone(),
+            weight: 1,
+            name: Some(signer_wallet.name.clone()),
+        });
+    }
 
-    let multisig_account = multisig::MultiSigAccount {
+    let total_weight = multisig::calculate_total_weight(&signer_entries);
+    let thresholds = multisig::Thresholds { low: threshold, medium: threshold, high: threshold };
+    multisig::validate_thresholds(&thresholds, total_weight)?;
+
+    let account = multisig::MultiSigAccount {
         name: name.clone(),
-        account_id: account_id.clone(),
-        signers: vec![],
-        thresholds: multisig::Thresholds::default(),
+        account_id: wallet.public_key.clone(),
+        signers: signer_entries,
+        thresholds,
         created_at: chrono::Utc::now().to_rfc3339(),
     };
 
-    // Store as a special wallet entry
-    let wallet = config::WalletEntry {
-        name: format!("multisig_{}", name),
-        public_key: account_id.clone(),
-        secret_key: Some(serde_json::to_string(&multisig_account)?),
-        network: network.clone(),
-        created_at: multisig_account.created_at.clone(),
-        funded: false,
-    };
-
-    cfg.wallets.push(wallet);
-    config::save(&cfg)?;
+    multisig::save_account(&account)?;
 
     println!();
-    p::success(&format!("Multi-sig account '{}' created!", name));
-    p::kv_accent("Account ID", &account_id);
+    p::header(&format!("Multi-sig: {}", name));
+    p::success("Multi-sig config saved");
+    p::kv_accent("Account ID", &account.account_id);
     p::kv("Network", &network);
-    p::info("Add signers with: starforge wallet multisig add-signer");
+    p::kv("Threshold", &threshold.to_string());
+    p::kv("Signers", &account.signers.len().to_string());
+    p::info("Sign with: starforge wallet multisig sign <name> --transaction tx.json");
     Ok(())
 }
 
-fn multisig_add_signer(account: String, public_key: String, weight: u8, signer_name: Option<String>) -> Result<()> {
-    config::validate_public_key(&public_key)?;
-    multisig::validate_weight(weight)?;
+fn multisig_sign(name: String, transaction: PathBuf, output: Option<PathBuf>) -> Result<()> {
+    config::validate_wallet_name(&name)?;
+    config::validate_file_path(&transaction, Some("json"))?;
 
-    let mut cfg = config::load()?;
-    let wallet_name = format!("multisig_{}", account);
+    let account = multisig::load_account(&name)?;
+    let cfg = config::load()?;
 
-    let wallet = cfg.wallets.iter_mut()
-        .find(|w| w.name == wallet_name)
-        .ok_or_else(|| anyhow::anyhow!("Multi-sig account '{}' not found", account))?;
+    let mut tx = multisig::load_transaction(&transaction)?;
 
-    let mut multisig_account: multisig::MultiSigAccount = serde_json::from_str(
-        wallet.secret_key.as_ref().unwrap()
-    )?;
+    p::header(&format!("Multi-sig Sign: {}", name));
+    p::kv("Account", &account.account_id);
+    p::kv("Transaction", &transaction.display().to_string());
 
-    // Check if signer already exists
-    if multisig_account.signers.iter().any(|s| s.public_key == public_key) {
-        anyhow::bail!("Signer '{}' already exists in account '{}'", public_key, account);
+    // Attempt to sign with every configured signer that we have a local secret key for.
+    let mut signed = 0u32;
+    for s in &account.signers {
+        let wallet_name = s.name.clone().unwrap_or_else(|| s.public_key.clone());
+        let Some(w) = cfg.wallets.iter().find(|w| w.public_key == s.public_key) else { continue };
+        let Some(sk) = &w.secret_key else { continue };
+
+        let plain_sk = if !sk.contains(':') && sk.starts_with('S') && sk.len() == 56 {
+            sk.clone()
+        } else {
+            let pwd = crypto::prompt_password(
+                &format!("Enter password for signer wallet '{}'", w.name),
+                false,
+            )?;
+            crypto::decrypt_secret(&pwd, sk)
+                .map_err(|_| anyhow::anyhow!("Incorrect password or unable to decrypt."))?
+        };
+
+        let sig = multisig::sign_transaction_partial(&tx.transaction_xdr, &plain_sk, "testnet")?;
+        if multisig::add_signature_to_transaction(&mut tx, &wallet_name, sig).is_ok() {
+            signed += 1;
+        }
     }
 
-    let signer = multisig::Signer {
-        public_key: public_key.clone(),
-        weight,
-        name: signer_name.clone(),
-    };
+    tx.threshold_required = account.thresholds.high;
+    tx.current_weight = tx.signatures.len().min(u8::MAX as usize) as u8;
+    if multisig::check_transaction_ready(&tx) {
+        tx.status = multisig::TransactionStatus::ReadyToSubmit;
+    }
 
-    multisig_account.signers.push(signer);
-
-    // Validate thresholds still make sense
-    let total_weight = multisig::calculate_total_weight(&multisig_account.signers);
-    multisig::validate_thresholds(&multisig_account.thresholds, total_weight)?;
-
-    wallet.secret_key = Some(serde_json::to_string(&multisig_account)?);
-    config::save(&cfg)?;
+    let out_path = output.unwrap_or_else(|| transaction.clone());
+    multisig::save_transaction(&out_path, &tx)?;
 
     println!();
-    p::success(&format!("Signer added to multi-sig account '{}'", account));
-    p::kv_accent("Public Key", &public_key);
-    p::kv("Weight", &weight.to_string());
-    if let Some(name) = signer_name {
-        p::kv("Name", &name);
-    }
-    p::kv("Total Weight", &total_weight.to_string());
-    Ok(())
-}
+    p::success("Signatures updated");
+    p::kv("Signatures added", &signed.to_string());
+    p::kv("Total signatures", &tx.signatures.len().to_string());
+    p::kv("Output", &out_path.display().to_string());
 
-fn multisig_remove_signer(account: String, public_key: String) -> Result<()> {
-    config::validate_public_key(&public_key)?;
-
-    let mut cfg = config::load()?;
-    let wallet_name = format!("multisig_{}", account);
-
-    let wallet = cfg.wallets.iter_mut()
-        .find(|w| w.name == wallet_name)
-        .ok_or_else(|| anyhow::anyhow!("Multi-sig account '{}' not found", account))?;
-
-    let mut multisig_account: multisig::MultiSigAccount = serde_json::from_str(
-        wallet.secret_key.as_ref().unwrap()
-    )?;
-
-    let before_count = multisig_account.signers.len();
-    multisig_account.signers.retain(|s| s.public_key != public_key);
-
-    if multisig_account.signers.len() == before_count {
-        anyhow::bail!("Signer '{}' not found in account '{}'", public_key, account);
+    if tx.status == multisig::TransactionStatus::ReadyToSubmit {
+        p::info("Transaction meets threshold and is ready to submit.");
+    } else {
+        p::warn("Transaction does not yet meet threshold.");
     }
 
-    // Validate thresholds still make sense
-    let total_weight = multisig::calculate_total_weight(&multisig_account.signers);
-    if total_weight > 0 {
-        multisig::validate_thresholds(&multisig_account.thresholds, total_weight)?;
-    }
-
-    wallet.secret_key = Some(serde_json::to_string(&multisig_account)?);
-    config::save(&cfg)?;
-
-    println!();
-    p::success(&format!("Signer removed from multi-sig account '{}'", account));
-    p::kv("Remaining Signers", &multisig_account.signers.len().to_string());
-    p::kv("Total Weight", &total_weight.to_string());
-    Ok(())
-}
-
-fn multisig_set_thresholds(account: String, low: Option<u8>, medium: Option<u8>, high: Option<u8>) -> Result<()> {
-    let mut cfg = config::load()?;
-    let wallet_name = format!("multisig_{}", account);
-
-    let wallet = cfg.wallets.iter_mut()
-        .find(|w| w.name == wallet_name)
-        .ok_or_else(|| anyhow::anyhow!("Multi-sig account '{}' not found", account))?;
-
-    let mut multisig_account: multisig::MultiSigAccount = serde_json::from_str(
-        wallet.secret_key.as_ref().unwrap()
-    )?;
-
-    if let Some(l) = low {
-        multisig::validate_threshold(l)?;
-        multisig_account.thresholds.low = l;
-    }
-    if let Some(m) = medium {
-        multisig::validate_threshold(m)?;
-        multisig_account.thresholds.medium = m;
-    }
-    if let Some(h) = high {
-        multisig::validate_threshold(h)?;
-        multisig_account.thresholds.high = h;
-    }
-
-    // Validate thresholds
-    let total_weight = multisig::calculate_total_weight(&multisig_account.signers);
-    multisig::validate_thresholds(&multisig_account.thresholds, total_weight)?;
-
-    wallet.secret_key = Some(serde_json::to_string(&multisig_account)?);
-    config::save(&cfg)?;
-
-    println!();
-    p::success(&format!("Thresholds updated for multi-sig account '{}'", account));
-    p::kv("Low", &multisig_account.thresholds.low.to_string());
-    p::kv("Medium", &multisig_account.thresholds.medium.to_string());
-    p::kv("High", &multisig_account.thresholds.high.to_string());
-    p::kv("Total Weight", &total_weight.to_string());
     Ok(())
 }
 
 fn multisig_list() -> Result<()> {
-    let cfg = config::load()?;
-
     p::header("Multi-Signature Accounts");
-
-    let multisig_accounts: Vec<_> = cfg.wallets.iter()
-        .filter(|w| w.name.starts_with("multisig_"))
-        .collect();
-
-    if multisig_accounts.is_empty() {
+    let accounts = multisig::list_accounts().unwrap_or_default();
+    if accounts.is_empty() {
         p::info("No multi-sig accounts found. Create one with: starforge wallet multisig create");
         return Ok(());
     }
 
     p::separator();
-
-    for (i, wallet) in multisig_accounts.iter().enumerate() {
-        let multisig_account: multisig::MultiSigAccount = serde_json::from_str(
-            wallet.secret_key.as_ref().unwrap()
-        )?;
-
-        let display_name = wallet.name.strip_prefix("multisig_").unwrap_or(&wallet.name);
-        println!("  {:>2}. {}", i + 1, display_name.bold());
-        p::kv("Account ID", &multisig_account.account_id);
-        p::kv("Network", &wallet.network);
-        p::kv("Signers", &multisig_account.signers.len().to_string());
-        p::kv("Total Weight", &multisig::calculate_total_weight(&multisig_account.signers).to_string());
-
-        if i < multisig_accounts.len() - 1 {
+    for (i, acct) in accounts.iter().enumerate() {
+        println!("  {:>2}. {}", i + 1, acct.name.bold());
+        p::kv("Account ID", &acct.account_id);
+        p::kv("Signers", &acct.signers.len().to_string());
+        p::kv("Threshold", &acct.thresholds.high.to_string());
+        if i < accounts.len() - 1 {
             println!();
         }
     }
-
     p::separator();
     Ok(())
 }
 
 fn multisig_show(name: String) -> Result<()> {
-    let cfg = config::load()?;
-    let wallet_name = format!("multisig_{}", name);
-
-    let wallet = cfg.wallets.iter()
-        .find(|w| w.name == wallet_name)
-        .ok_or_else(|| anyhow::anyhow!("Multi-sig account '{}' not found", name))?;
-
-    let multisig_account: multisig::MultiSigAccount = serde_json::from_str(
-        wallet.secret_key.as_ref().unwrap()
-    )?;
+    let multisig_account = multisig::load_account(&name)?;
 
     p::header(&format!("Multi-Sig Account: {}", name));
     p::separator();
     p::kv_accent("Account ID", &multisig_account.account_id);
-    p::kv("Network", &wallet.network);
     p::kv("Created", &multisig_account.created_at);
     
     println!();

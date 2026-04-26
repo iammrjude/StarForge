@@ -192,6 +192,50 @@ pub fn submit_payment_transaction(
     }
 }
 
+pub fn submit_multisig_transaction(
+    signed_transaction_xdr: &str,
+    network: &str,
+) -> Result<TransactionSubmitResult> {
+    // Submit a pre-signed transaction (e.g. multisig envelope) to Horizon.
+    let url = format!("{}/transactions", horizon_url(network));
+    let form_data = format!("tx={}", urlencoding::encode(signed_transaction_xdr));
+
+    let res = ureq::post(&url)
+        .set("Content-Type", "application/x-www-form-urlencoded")
+        .send_string(&form_data)
+        .with_context(|| "Failed to submit transaction to Horizon")?;
+
+    let status = res.status();
+    if status == 200 {
+        let result: serde_json::Value =
+            res.into_json().with_context(|| "Failed to parse transaction response")?;
+
+        let hash = result
+            .get("hash")
+            .and_then(|h| h.as_str())
+            .unwrap_or("unknown")
+            .to_string();
+
+        Ok(TransactionSubmitResult {
+            hash,
+            successful: true,
+        })
+    } else {
+        let error_text = res
+            .into_string()
+            .unwrap_or_else(|_| "Unknown error".to_string());
+
+        if let Ok(horizon_error) = serde_json::from_str::<HorizonError>(&error_text) {
+            let detail = horizon_error
+                .detail
+                .unwrap_or_else(|| "No additional details".to_string());
+            anyhow::bail!("Transaction failed: {} - {}", horizon_error.title, detail);
+        } else {
+            anyhow::bail!("Transaction failed with status {}: {}", status, error_text);
+        }
+    }
+}
+
 fn build_payment_transaction_xdr(
     source: &str,
     destination: &str,

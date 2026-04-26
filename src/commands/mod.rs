@@ -1,12 +1,15 @@
 pub mod completions;
 pub mod contract;
 pub mod deploy;
+pub mod gas;
 pub mod info;
 pub mod invoke;
 pub mod monitor;
 pub mod network;
 pub mod new;
+pub mod plugin;
 pub mod shell;
+pub mod test;
 pub mod tx;
 pub mod wallet;
 pub mod tutorial;
