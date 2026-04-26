@@ -1,0 +1,18 @@
+services:
+  stellar-testnet:
+    image: stellar/quickstart:latest
+    command: ["--local"]
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "sh", "-c", "wget -qO- http://localhost:8000/ >/dev/null 2>&1"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  soroban-rpc:
+    image: stellar/quickstart:latest
+    command: ["--local"]
+    ports:
+      - "8001:8000"
+

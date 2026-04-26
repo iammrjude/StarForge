@@ -1,0 +1,9 @@
+target
+.git
+.github
+**/*.rs.bk
+**/*.swp
+**/*.tmp
+Dockerfile
+docker-compose.yml
+

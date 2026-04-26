@@ -59,5 +59,6 @@ enum Commands {
     #[command(subcommand)]
     Network(crate::commands::network::NetworkCommands),
     /// Print shell completion scripts
+    #[command(subcommand)]
     Completions(CompletionShell),
 }

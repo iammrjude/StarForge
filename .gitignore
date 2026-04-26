@@ -131,6 +131,7 @@ generated/
 dist/
 build/
 out/
+completions/
 
 # Rust analyzer
 .rust-analyzer/

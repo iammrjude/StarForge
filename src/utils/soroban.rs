@@ -177,6 +177,7 @@ pub fn inspect_contract(contract_id: &str, network: &str) -> Result<ContractInsp
 fn get_rpc_url(network: &str) -> String {
     match network {
         "mainnet" => "https://mainnet.sorobanrpc.com".to_string(),
+        "docker-testnet" => "http://localhost:8000/rpc".to_string(),
         _ => "https://soroban-testnet.stellar.org".to_string(),
     }
 }

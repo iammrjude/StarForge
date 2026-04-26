@@ -4,6 +4,7 @@ use serde::Deserialize;
 pub fn horizon_url(network: &str) -> &'static str {
     match network {
         "mainnet" => "https://horizon.stellar.org",
+        "docker-testnet" => "http://localhost:8000",
         _ => "https://horizon-testnet.stellar.org",
     }
 }

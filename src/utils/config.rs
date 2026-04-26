@@ -73,8 +73,11 @@ pub fn validate_file_path(path: &std::path::Path, expected_ext: Option<&str>) ->
 /// Validates network setting.
 pub fn validate_network(network: &str) -> Result<()> {
     match network {
-        "testnet" | "mainnet" => Ok(()),
-        _ => anyhow::bail!("Unsupported network '{}'. Use 'testnet' or 'mainnet'.", network),
+        "testnet" | "mainnet" | "docker-testnet" => Ok(()),
+        _ => anyhow::bail!(
+            "Unsupported network '{}'. Use 'testnet', 'mainnet', or 'docker-testnet'.",
+            network
+        ),
     }
 }
 
@@ -141,6 +144,13 @@ impl Default for Config {
             horizon_url: "https://horizon.stellar.org".to_string(),
             soroban_rpc_url: Some("https://mainnet.sorobanrpc.com".to_string()),
         });
+        networks.insert(
+            "docker-testnet".to_string(),
+            NetworkConfig {
+                horizon_url: "http://localhost:8000".to_string(),
+                soroban_rpc_url: Some("http://localhost:8000/rpc".to_string()),
+            },
+        );
 
         Self {
             version: "1".to_string(),

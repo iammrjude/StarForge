@@ -43,7 +43,14 @@ enum Commands {
     #[command(subcommand)]
     Network(commands::network::NetworkCommands),
     /// Generate shell completions for bash, zsh, and fish
+    #[command(subcommand)]
     Completions(commands::completions::CompletionShell),
+
+    /// Interactive REPL for local Soroban contract testing
+    Shell(commands::shell::ShellArgs),
+
+    /// Live monitoring (contract events or wallet threshold)
+    Monitor(commands::monitor::MonitorArgs),
 }
 
 fn main() {
@@ -62,6 +69,8 @@ fn main() {
         Commands::Tx(_) => "tx",
         Commands::Network(_) => "network",
         Commands::Completions(_) => "completions",
+        Commands::Shell(_) => "shell",
+        Commands::Monitor(_) => "monitor",
     }.to_string();
 
     let start = std::time::Instant::now();
@@ -74,6 +83,8 @@ fn main() {
         Commands::Tx(args) => commands::tx::handle(args),
         Commands::Network(cmd) => commands::network::handle(cmd),
         Commands::Completions(shell) => commands::completions::handle(shell),
+        Commands::Shell(args) => commands::shell::handle(args),
+        Commands::Monitor(args) => commands::monitor::handle(args),
     };
     let duration = start.elapsed();
 
