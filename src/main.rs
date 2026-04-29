@@ -84,6 +84,10 @@ enum Commands {
     #[command(subcommand)]
     Template(commands::template::TemplateCommands),
 
+    /// Contract upgrade management (propose, approve, execute, rollback)
+    #[command(subcommand)]
+    Upgrade(commands::upgrade::UpgradeCommands),
+
     /// Execute an installed plugin command (e.g. `starforge defi ...`)
     #[command(external_subcommand)]
     External(Vec<String>),
