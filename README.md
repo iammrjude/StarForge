@@ -1,6 +1,6 @@
-# ⚡ starforge
+# ? starforge
 
-> A developer productivity CLI for Stellar and Soroban workflows — built in Rust.
+> A developer productivity CLI for Stellar and Soroban workflows â€” built in Rust.
 
 ![License: MIT](https://img.shields.io/badge/License-MIT-cyan.svg)
 ![Language: Rust](https://img.shields.io/badge/Language-Rust-orange.svg)
@@ -12,20 +12,20 @@
 
 ## Overview
 
-**starforge** is a free, open-source command-line toolkit for developers building on the Stellar network. It brings together the most common Stellar and Soroban developer workflows — wallet management, project scaffolding, and contract deployment — into a single fast, ergonomic CLI.
+**starforge** is a free, open-source command-line toolkit for developers building on the Stellar network. It brings together the most common Stellar and Soroban developer workflows â€” wallet management, project scaffolding, and contract deployment â€” into a single fast, ergonomic CLI.
 
 Think of it as the "Hardhat or Foundry" experience for the Stellar ecosystem, built in Rust for speed and reliability.
 
-This project is actively maintained and participates in the [Stellar Wave Program](https://www.drips.network/wave/stellar) on Drips — a monthly open-source contribution sprint where contributors earn rewards for merged pull requests.
+This project is actively maintained and participates in the [Stellar Wave Program](https://www.drips.network/wave/stellar) on Drips â€” a monthly open-source contribution sprint where contributors earn rewards for merged pull requests.
 
 ---
 
 ## Features
 
-### 🔑 Wallet Management
+### ?? Wallet Management
 Create and manage Stellar ed25519 keypairs locally. Generate cryptographically secure keys using proper Stellar strkey encoding (G... for public, S... for secret). Optionally encrypt keys at rest with AES-256-GCM. Fund testnet accounts via Friendbot, list all saved wallets, inspect live on-chain balances, and securely store keys in `~/.starforge/config.toml`.
 
-### ◻ Project Scaffolding
+### ? Project Scaffolding
 Scaffold new Soroban smart contract projects from battle-tested templates with one command. Choose from: `hello-world`, `token`, `nft`, and `voting`. Use interactive mode (`--interactive`) to customize contract options like author, license, storage type, and test inclusion. Also scaffolds full Stellar dApp frontends (Vite + React).
 
 **NEW: Template Marketplace** - Discover and use community-contributed templates:
@@ -40,7 +40,7 @@ starforge new contract my-dex --template uniswap-v2 --from marketplace
 starforge template publish ./my-template
 ```
 
-### 🚀 Contract Deployment
+### ?? Contract Deployment
 Validate, size-check, and deploy compiled Soroban `.wasm` files to Testnet or Mainnet. Verifies account balance on-chain, calculates WASM hash, and generates the exact `stellar contract deploy` command to complete the deployment.
 
 ---
@@ -49,7 +49,7 @@ Validate, size-check, and deploy compiled Soroban `.wasm` files to Testnet or Ma
 
 ### Prerequisites
 
-- Rust ≥ 1.80 ([install via rustup](https://rustup.rs))
+- Rust = 1.80 ([install via rustup](https://rustup.rs))
 
 ### Build from source
 
@@ -103,7 +103,18 @@ starforge wallet fund alice
 
 # Remove a wallet
 starforge wallet remove alice
+
+# Rotate a wallet but keep the same local name
+starforge wallet rotate alice --fund
+
+# Create a multisig config and also write a setup transaction payload
+starforge wallet multisig create treasury \
+  --threshold 2 \
+  --signers alice,bob,charlie \
+  --xdr-output treasury-setup.json
 ```
+
+Wallet rotation keeps the same local wallet name in `~/.starforge/config.toml`, but it creates a brand-new on-chain Stellar account keypair. Any scripts, signer sets, or deployment flows that referenced the previous public key still need to be updated separately.
 
 ### Network commands
 
@@ -214,13 +225,13 @@ starforge info
 ### Shell completions
 
 ```bash
-# Bash — add to ~/.bashrc
+# Bash â€” add to ~/.bashrc
 source <(starforge completions bash)
 
-# Zsh — add to ~/.zshrc
+# Zsh â€” add to ~/.zshrc
 source <(starforge completions zsh)
 
-# Fish — save to fish completions directory
+# Fish â€” save to fish completions directory
 starforge completions fish > ~/.config/fish/completions/starforge.fish
 ```
 
@@ -232,22 +243,22 @@ After adding the line to your shell config, restart your shell or run `source ~/
 
 ```
 starforge/
-├── Cargo.toml
-└── src/
-    ├── main.rs                  # CLI entry point + banner
-    ├── commands/
-    │   ├── mod.rs
-    │   ├── wallet.rs            # wallet create/list/show/fund/remove
-    │   ├── new.rs               # project scaffolding + templates
-    │   ├── contract.rs          # contract inspect + invoke
-    │   ├── deploy.rs            # contract deployment
-    │   └── info.rs              # environment info
-    └── utils/
-        ├── mod.rs
-        ├── config.rs            # ~/.starforge/config.toml read/write
-        ├── horizon.rs           # Horizon API + Friendbot HTTP calls
-        ├── soroban.rs           # Soroban RPC helpers
-        └── print.rs             # Consistent CLI output helpers
++-- Cargo.toml
++-- src/
+    +-- main.rs                  # CLI entry point + banner
+    +-- commands/
+    Â¦   +-- mod.rs
+    Â¦   +-- wallet.rs            # wallet create/list/show/fund/remove
+    Â¦   +-- new.rs               # project scaffolding + templates
+    Â¦   +-- contract.rs          # contract inspect + invoke
+    Â¦   +-- deploy.rs            # contract deployment
+    Â¦   +-- info.rs              # environment info
+    +-- utils/
+        +-- mod.rs
+        +-- config.rs            # ~/.starforge/config.toml read/write
+        +-- horizon.rs           # Horizon API + Friendbot HTTP calls
+        +-- soroban.rs           # Soroban RPC helpers
+        +-- print.rs             # Consistent CLI output helpers
 ```
 
 ---
@@ -328,7 +339,7 @@ Please keep PRs scoped to a single issue and include a clear description of what
 ---
 ## License
 
-MIT © 2025 — See [LICENSE](./LICENSE) for details.
+MIT Â© 2025 â€” See [LICENSE](./LICENSE) for details.
 
 ---
 
@@ -344,26 +355,27 @@ Powered by the [Stellar Horizon API](https://developers.stellar.org/api/horizon)
 
 StarForge has comprehensive documentation covering all aspects of the project:
 
-### 📚 Core Documentation
+### ?? Core Documentation
 - **[README.md](README.md)** - This file, quick start and overview
 - **[Documentation.md](Documentation.md)** - Extended documentation with architecture overview
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** - Complete system architecture and design
 - **[DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md)** - Contributing and development guide
 - **[API_REFERENCE.md](API_REFERENCE.md)** - Complete command reference
 
-### 🎯 Feature Documentation
+### ?? Feature Documentation
 - **[TEMPLATE_MARKETPLACE.md](TEMPLATE_MARKETPLACE.md)** - Template marketplace feature
 - **[QUICK_START_TEMPLATES.md](QUICK_START_TEMPLATES.md)** - Template quick start guide
 
-### 📖 Navigation
+### ?? Navigation
 - **[DOCUMENTATION_INDEX.md](DOCUMENTATION_INDEX.md)** - Complete documentation index
 - **[DOCUMENTATION_SUMMARY.md](DOCUMENTATION_SUMMARY.md)** - Documentation overview
 
-### 📁 Examples
+### ?? Examples
 - **[examples/template_marketplace_usage.md](examples/template_marketplace_usage.md)** - Practical examples
 - **[tutorials/hello-world/](tutorials/hello-world/)** - Beginner tutorial
 
 **Total**: 17 documentation files with 7,700+ lines covering architecture, development, API reference, and examples.
 
 For a complete overview, see [DOCUMENTATION_INDEX.md](DOCUMENTATION_INDEX.md).
+
 
