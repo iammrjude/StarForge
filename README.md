@@ -26,7 +26,7 @@ This project is actively maintained and participates in the [Stellar Wave Progra
 Create and manage Stellar ed25519 keypairs locally. Generate cryptographically secure keys using proper Stellar strkey encoding (G... for public, S... for secret). Optionally encrypt keys at rest with AES-256-GCM. Fund testnet accounts via Friendbot, list all saved wallets, inspect live on-chain balances, and securely store keys in `~/.starforge/config.toml`.
 
 ### ◻ Project Scaffolding
-Scaffold new Soroban smart contract projects from battle-tested templates with one command. Choose from: `hello-world`, `token`, `nft`, and `voting`. Use interactive mode (`--interactive`) to customize contract options like author, license, storage type, and test inclusion. Also scaffolds full Stellar dApp frontends (Vite + React).
+Scaffold new Soroban smart contract projects from battle-tested templates with one command. Choose from: `hello-world`, `token`, `nft`, `voting`, `stablecoin`, and `escrow`. Use interactive mode (`--interactive`) to customize contract options like author, license, storage type, and test inclusion. Also scaffolds full Stellar dApp frontends (Vite + React).
 
 **NEW: Template Marketplace** - Discover and use community-contributed templates:
 ```bash
@@ -140,6 +140,8 @@ starforge new contract my-contract --interactive
 starforge new contract my-token --template token
 starforge new contract my-nft --template nft
 starforge new contract my-vote --template voting
+starforge new contract my-stable --template stablecoin
+starforge new contract my-escrow --template escrow
 
 # Search marketplace templates
 starforge template search defi
