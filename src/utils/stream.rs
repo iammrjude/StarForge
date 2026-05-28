@@ -1,5 +1,4 @@
 use anyhow::{Context, Result};
-use rand::Rng;
 use serde::Deserialize;
 use std::thread;
 use std::time::Duration;
@@ -11,6 +10,36 @@ pub struct SorobanEventStream {
     cursor: Option<String>,
     poll_interval: Duration,
     backoff: Backoff,
+}
+
+#[derive(Debug, Clone)]
+struct Backoff {
+    attempt: u32,
+    base_ms: u64,
+    max_ms: u64,
+}
+
+impl Default for Backoff {
+    fn default() -> Self {
+        Self {
+            attempt: 0,
+            base_ms: 500,
+            max_ms: 30_000,
+        }
+    }
+}
+
+impl Backoff {
+    fn reset(&mut self) {
+        self.attempt = 0;
+    }
+
+    fn next_delay(&mut self) -> Duration {
+        let exp = self.attempt.min(6);
+        self.attempt = self.attempt.saturating_add(1);
+        let ms = (self.base_ms.saturating_mul(1_u64 << exp)).min(self.max_ms);
+        Duration::from_millis(ms)
+    }
 }
 
 impl SorobanEventStream {
@@ -101,7 +130,6 @@ pub struct SorobanEvent {
     pub ledger: u32,
     pub id: String,
     #[serde(default)]
-    #[allow(dead_code)]
     pub topic: Vec<String>,
     pub value: serde_json::Value,
 }
