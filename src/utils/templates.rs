@@ -10,9 +10,33 @@ pub struct TemplateRegistry {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum TemplateSource {
+    Git { url: String, branch: Option<String> },
+    Local { path: String },
+    Builtin { id: String },
+}
+
+impl std::fmt::Display for TemplateSource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TemplateSource::Git { url, branch } => {
+                if let Some(branch) = branch {
+                    write!(f, "git:{}@{}", url, branch)
+                } else {
+                    write!(f, "git:{}", url)
+                }
+            }
+            TemplateSource::Local { path } => write!(f, "local:{}", path),
+            TemplateSource::Builtin { id } => write!(f, "builtin:{}", id),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TemplateEntry {
     pub name: String,
     pub description: String,
+    pub author: String,
     pub version: String,
     pub author: String,
     pub source: String,
@@ -27,6 +51,7 @@ pub struct TemplateEntry {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)]
 struct TemplateManifest {
     name: Option<String>,
     description: Option<String>,
@@ -36,6 +61,7 @@ struct TemplateManifest {
     tags: Vec<String>,
 }
 
+#[allow(dead_code)]
 const DEFAULT_REGISTRY: &str = include_str!("../../templates/registry.json");
 
 fn registry_path() -> Result<PathBuf> {
@@ -47,6 +73,16 @@ fn registry_path() -> Result<PathBuf> {
     Ok(dir.join("registry.json"))
 }
 
+fn templates_dir() -> Result<PathBuf> {
+    let home = dirs::home_dir().ok_or_else(|| anyhow::anyhow!("Could not find home directory"))?;
+    let dir = home.join(".starforge").join("templates").join("storage");
+    if !dir.exists() {
+        fs::create_dir_all(&dir).with_context(|| format!("Failed to create {}", dir.display()))?;
+    }
+    Ok(dir)
+}
+
+#[allow(dead_code)]
 fn template_storage_dir() -> Result<PathBuf> {
     let home = dirs::home_dir().ok_or_else(|| anyhow::anyhow!("Could not find home directory"))?;
     let dir = home.join(".starforge").join("templates").join("storage");
@@ -118,6 +154,7 @@ pub fn search_templates(query: &str, tags: Option<&[String]>) -> Result<Vec<Temp
     Ok(results)
 }
 
+#[allow(dead_code)]
 pub fn get_template(name: &str) -> Result<TemplateEntry> {
     let registry = load_registry()?;
     registry
@@ -156,6 +193,7 @@ pub fn remove_template(name: &str) -> Result<()> {
     Ok(())
 }
 
+#[allow(dead_code)]
 pub fn fetch_template(entry: &TemplateEntry, dest: &Path) -> Result<()> {
     match &entry.source {
         TemplateSource::Git { url, branch } => {
@@ -170,6 +208,7 @@ pub fn fetch_template(entry: &TemplateEntry, dest: &Path) -> Result<()> {
     }
 }
 
+#[allow(dead_code)]
 fn fetch_git_template(url: &str, branch: Option<&str>, dest: &Path) -> Result<()> {
     use std::process::Command;
     
@@ -201,6 +240,7 @@ fn fetch_git_template(url: &str, branch: Option<&str>, dest: &Path) -> Result<()
     Ok(())
 }
 
+#[allow(dead_code)]
 fn fetch_local_template(source: &Path, dest: &Path) -> Result<()> {
     if !source.exists() {
         anyhow::bail!("Local template path does not exist: {}", source.display());
@@ -275,6 +315,7 @@ pub fn publish_template(
         updated_at: chrono::Utc::now().to_rfc3339(),
         downloads: 0,
         verified: false,
+        path: None,
     };
     
     add_template(entry)?;
@@ -282,6 +323,7 @@ pub fn publish_template(
     Ok(())
 }
 
+#[allow(dead_code)]
 pub fn validate_template_structure(path: &Path) -> Result<()> {
     // Check for required files
     let cargo_toml = path.join("Cargo.toml");
@@ -320,6 +362,7 @@ mod tests {
             updated_at: "2025-01-01T00:00:00Z".to_string(),
             downloads: 100,
             verified: true,
+            path: None,
         });
         
         // Test name search

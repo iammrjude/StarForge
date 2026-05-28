@@ -80,7 +80,7 @@ enum Commands {
     /// Manage third-party plugins
     #[command(subcommand)]
     Plugin(commands::plugin::PluginCommands),
-    /// Manage community contract templates
+    /// Manage community contract templates from the marketplace
     #[command(subcommand)]
     Template(commands::template::TemplateCommands),
 
@@ -149,7 +149,7 @@ fn main() {
         Commands::Gas(args) => commands::gas::handle(args),
         Commands::Plugin(args) => commands::plugin::handle(args),
         Commands::Template(args) => commands::template::handle(args),
-        Commands::Upgrade(cmd) => commands::upgrade::handle(cmd),
+        Commands::Upgrade(args) => commands::upgrade::handle(args),
         Commands::External(args) => handle_external_plugin(args),
     };
     let duration = start.elapsed();

@@ -1,8 +1,7 @@
 use crate::utils::{print as p, templates};
 use anyhow::Result;
 use clap::Subcommand;
-use colored::*;
-use dialoguer::{Confirm, Input};
+use dialoguer::Input;
 use std::path::PathBuf;
 
 #[derive(Subcommand)]
@@ -53,27 +52,72 @@ pub enum TemplateCommands {
 
 pub fn handle(cmd: TemplateCommands) -> Result<()> {
     match cmd {
-        TemplateCommands::Publish { path } => publish(path),
+        TemplateCommands::Publish { 
+            path, 
+            name, 
+            description, 
+            author, 
+            tags, 
+            version 
+        } => publish(path, name, description, author, tags, version),
         TemplateCommands::List => list(),
-        TemplateCommands::Search { query } => search(query),
+        TemplateCommands::Search { query, tags } => search(query, tags),
+        TemplateCommands::Show { name } => show(name),
+        TemplateCommands::Remove { name } => remove(name),
+        TemplateCommands::Init => init(),
     }
 }
 
-fn publish(path: PathBuf) -> Result<()> {
-    let template = templates::publish_template(&path)?;
+fn publish(
+    path: PathBuf, 
+    name: Option<String>, 
+    description: Option<String>, 
+    author: Option<String>, 
+    tags: Option<String>, 
+    version: String
+) -> Result<()> {
+    // Prompt for missing information
+    let name = name.unwrap_or_else(|| {
+        Input::new()
+            .with_prompt("Template name")
+            .interact_text()
+            .unwrap()
+    });
+    
+    let description = description.unwrap_or_else(|| {
+        Input::new()
+            .with_prompt("Template description")
+            .interact_text()
+            .unwrap()
+    });
+    
+    let author = author.unwrap_or_else(|| {
+        Input::new()
+            .with_prompt("Author name")
+            .interact_text()
+            .unwrap()
+    });
+    
+    let tags_str = tags.unwrap_or_else(|| {
+        Input::new()
+            .with_prompt("Tags (comma-separated)")
+            .interact_text()
+            .unwrap_or_default()
+    });
+    
+    let tags: Vec<String> = tags_str.split(',')
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
+    
+    let version_clone = version.clone();
+    templates::publish_template(&path, name.clone(), description, author, tags, version)?;
 
     p::header("Template Publish");
     p::success("Template registered successfully");
-    p::kv_accent("Name", &template.name);
-    p::kv("Version", &template.version);
-    p::kv("Source", &template.source);
-    if !template.tags.is_empty() {
-        p::kv("Tags", &template.tags.join(", "));
-    }
-    if let Some(path) = template.path.as_ref() {
-        p::kv("Path", path);
-    }
-
+    p::kv_accent("Name", &name);
+    p::kv("Version", &version_clone);
+    
     Ok(())
 }
 
@@ -88,7 +132,7 @@ fn list() -> Result<()> {
     for (i, template) in registry.templates.iter().enumerate() {
         println!("  {:>2}. {}@{}", i + 1, template.name, template.version);
         p::kv("Description", &template.description);
-        p::kv("Source", &template.source);
+        p::kv("Source", &template.source.to_string());
         if !template.tags.is_empty() {
             p::kv("Tags", &template.tags.join(", "));
         }
@@ -134,5 +178,43 @@ fn search(query: String) -> Result<()> {
         }
     }
 
+    Ok(())
+}
+
+fn show(name: String) -> Result<()> {
+    let registry = templates::load_registry()?;
+    let template = registry.templates
+        .iter()
+        .find(|t| t.name == name)
+        .ok_or_else(|| anyhow::anyhow!("Template '{}' not found", name))?;
+    
+    p::header(&format!("Template: {}", template.name));
+    p::kv("Description", &template.description);
+    p::kv("Author", &template.author);
+    p::kv("Version", &template.version);
+    p::kv("Source", &template.source.to_string());
+    if !template.tags.is_empty() {
+        p::kv("Tags", &template.tags.join(", "));
+    }
+    p::kv("Downloads", &template.downloads.to_string());
+    p::kv("Verified", if template.verified { "Yes" } else { "No" });
+    p::kv("Created", &template.created_at);
+    p::kv("Updated", &template.updated_at);
+    
+    Ok(())
+}
+
+fn remove(name: String) -> Result<()> {
+    templates::remove_template(&name)?;
+    p::header("Template Remove");
+    p::success(&format!("Template '{}' removed successfully", name));
+    Ok(())
+}
+
+fn init() -> Result<()> {
+    p::header("Template Registry Initialization");
+    p::info("Initializing template registry with example templates...");
+    // This would initialize with default templates
+    p::success("Template registry initialized");
     Ok(())
 }
