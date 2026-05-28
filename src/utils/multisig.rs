@@ -64,6 +64,12 @@ pub enum TransactionStatus {
     Failed,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct MultisigSetupStep {
+    pub title: String,
+    pub command: String,
+}
+
 fn multisig_dir() -> Result<PathBuf> {
     let dir = crate::utils::config::get_data_dir()?.join("multisig");
     if !dir.exists() {
@@ -275,6 +281,77 @@ pub fn combine_signatures(
     Ok(general_purpose::STANDARD.encode(combined))
 }
 
+pub fn build_account_setup_transaction(
+    account: &MultiSigAccount,
+    network: &str,
+) -> Result<MultiSigTransaction> {
+    let operations = account
+        .signers
+        .iter()
+        .map(|signer| {
+            format!(
+                "set_options signer={} weight={}",
+                signer.public_key, signer.weight
+            )
+        })
+        .chain(std::iter::once(format!(
+            "set_options thresholds={}/{}/{}",
+            account.thresholds.low, account.thresholds.medium, account.thresholds.high
+        )))
+        .collect::<Vec<_>>();
+
+    let transaction_xdr = build_multisig_transaction_xdr(&account.account_id, &operations, 0, network)?;
+
+    Ok(MultiSigTransaction {
+        id: format!("setup-{}", account.name),
+        account_id: account.account_id.clone(),
+        transaction_xdr,
+        signatures: Vec::new(),
+        threshold_required: account.thresholds.high,
+        current_weight: 0,
+        status: TransactionStatus::Pending,
+        created_at: chrono::Utc::now().to_rfc3339(),
+    })
+}
+
+pub fn build_stellar_cli_steps(account: &MultiSigAccount, network: &str) -> Vec<MultisigSetupStep> {
+    let signer_args = account
+        .signers
+        .iter()
+        .map(|signer| format!("--signer {} --signer-weight {}", signer.public_key, signer.weight))
+        .collect::<Vec<_>>()
+        .join(" ");
+
+    vec![
+        MultisigSetupStep {
+            title: "Inspect the current account state".to_string(),
+            command: format!(
+                "stellar account show --account {} --network {}",
+                account.account_id, network
+            ),
+        },
+        MultisigSetupStep {
+            title: "Apply signer weights and thresholds on-chain".to_string(),
+            command: format!(
+                "stellar tx new set-options --source-account {} {} --low-threshold {} --med-threshold {} --high-threshold {} --network {}",
+                account.account_id,
+                signer_args,
+                account.thresholds.low,
+                account.thresholds.medium,
+                account.thresholds.high,
+                network
+            ),
+        },
+        MultisigSetupStep {
+            title: "Verify the account now reflects the multi-sig settings".to_string(),
+            command: format!(
+                "stellar account show --account {} --network {}",
+                account.account_id, network
+            ),
+        },
+    ]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -355,3 +432,4 @@ mod tests {
         assert!(!check_transaction_ready(&tx2));
     }
 }
+

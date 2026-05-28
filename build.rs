@@ -16,11 +16,23 @@ enum Commands {
     Wallet,
     New,
     Contract,
+    Inspect,
     Deploy,
     Info,
     Tx,
     Network,
     Completions,
+    Shell,
+    Monitor,
+    Tutorial,
+    Benchmark,
+    Test,
+    Gas,
+    Plugin,
+    Template,
+    Upgrade,
+    #[command(external_subcommand)]
+    External(Vec<String>),
 }
 
 fn main() {
@@ -30,7 +42,7 @@ fn main() {
     };
 
     let mut cmd = Cli::command();
-    
+
     // Create a directory for completions in the project root for easier access
     // or just leave them in OUT_DIR as per standard practice.
     // The issue says "Install completions to appropriate system directories".
@@ -40,7 +52,8 @@ fn main() {
     fs::create_dir_all(&completions_dir).unwrap();
 
     for &shell in &[Shell::Bash, Shell::Zsh, Shell::Fish] {
-        generate_to(shell, &mut cmd, "starforge", &completions_dir).expect("Failed to generate completions");
+        generate_to(shell, &mut cmd, "starforge", &completions_dir)
+            .expect("Failed to generate completions");
     }
 
     let rustc = env::var_os("RUSTC").unwrap_or_else(|| "rustc".into());

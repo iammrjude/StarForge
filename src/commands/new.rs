@@ -62,15 +62,8 @@ pub fn handle(cmd: NewCommands) -> Result<()> {
     }
 }
 
-fn search_templates(query: &str, tags: Option<&str>) -> Result<()> {
-    let tag_list = tags.map(|t| {
-        t.split(',')
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty())
-            .collect::<Vec<_>>()
-    });
-    
-    let results = templates::search_templates(query, tag_list.as_deref())?;
+fn search_templates(query: &str) -> Result<()> {
+    let results = templates::search_templates(query, None)?;
     p::header(&format!("Template search results for '{}'", query));
     
     if let Some(ref tags) = tag_list {
@@ -213,6 +206,8 @@ fn scaffold_contract(
         "token" => token_template(&name),
         "voting" => voting_template(&name),
         "nft" => nft_template(&name),
+        "stablecoin" => stablecoin_template(&name),
+        "escrow" => escrow_template(&name),
         _ => {
             // For now, treat unknown templates as hello-world
             // TODO: Implement template_source_content function
@@ -741,6 +736,190 @@ mod test {{
         
         let uri = client.token_uri(&1);
         assert_eq!(uri, String::from_str(&env, "ipfs://token1"));
+    }}
+}}
+"#, pascal = pascal)
+}
+
+fn stablecoin_template(name: &str) -> String {
+    let pascal = to_pascal(name);
+    format!(r#"#![no_std]
+use soroban_sdk::{{contract, contractimpl, contracttype, Address, Env, String}};
+
+#[derive(Clone)]
+#[contracttype]
+pub enum DataKey {{
+    Admin,
+    Balance(Address),
+    TotalSupply,
+    Pegged,
+}}
+
+#[contract]
+pub struct {pascal};
+
+#[contractimpl]
+impl {pascal} {{
+    pub fn initialize(env: Env, admin: Address, pegged_asset: String) {{
+        admin.require_auth();
+        env.storage().instance().set(&DataKey::Admin, &admin);
+        env.storage().instance().set(&DataKey::Pegged, &pegged_asset);
+        env.storage().instance().set(&DataKey::TotalSupply, &0i128);
+    }}
+
+    pub fn mint(env: Env, to: Address, amount: i128) {{
+        let admin: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
+        admin.require_auth();
+        let balance: i128 = env.storage().persistent().get(&DataKey::Balance(to.clone())).unwrap_or(0);
+        env.storage().persistent().set(&DataKey::Balance(to), &(balance + amount));
+        let supply: i128 = env.storage().instance().get(&DataKey::TotalSupply).unwrap_or(0);
+        env.storage().instance().set(&DataKey::TotalSupply, &(supply + amount));
+    }}
+
+    pub fn burn(env: Env, from: Address, amount: i128) {{
+        from.require_auth();
+        let balance: i128 = env.storage().persistent().get(&DataKey::Balance(from.clone())).unwrap_or(0);
+        if balance < amount {{ panic!("insufficient balance"); }}
+        env.storage().persistent().set(&DataKey::Balance(from), &(balance - amount));
+        let supply: i128 = env.storage().instance().get(&DataKey::TotalSupply).unwrap_or(0);
+        env.storage().instance().set(&DataKey::TotalSupply, &(supply - amount));
+    }}
+
+    pub fn balance(env: Env, id: Address) -> i128 {{
+        env.storage().persistent().get(&DataKey::Balance(id)).unwrap_or(0)
+    }}
+
+    pub fn total_supply(env: Env) -> i128 {{
+        env.storage().instance().get(&DataKey::TotalSupply).unwrap_or(0)
+    }}
+}}
+
+#[cfg(test)]
+mod test {{
+    use super::*;
+    use soroban_sdk::testutils::Address as _;
+
+    #[test]
+    fn test_stablecoin_lifecycle() {{
+        let env = Env::default();
+        let id = env.register_contract(None, {pascal});
+        let client = {pascal}Client::new(&env, &id);
+        let admin = Address::generate(&env);
+        let user = Address::generate(&env);
+        env.mock_all_auths();
+        client.initialize(&admin, &String::from_str(&env, "USDC"));
+        client.mint(&user, &1000);
+        assert_eq!(client.balance(&user), 1000);
+        assert_eq!(client.total_supply(), 1000);
+        client.burn(&user, &400);
+        assert_eq!(client.balance(&user), 600);
+        assert_eq!(client.total_supply(), 600);
+    }}
+}}
+"#, pascal = pascal)
+}
+
+fn escrow_template(name: &str) -> String {
+    let pascal = to_pascal(name);
+    format!(r#"#![no_std]
+use soroban_sdk::{{contract, contractimpl, contracttype, Address, Env}};
+
+#[derive(Clone, PartialEq)]
+#[contracttype]
+pub enum EscrowState {{
+    Pending,
+    Released,
+    Refunded,
+}}
+
+#[derive(Clone)]
+#[contracttype]
+pub struct Escrow {{
+    pub depositor: Address,
+    pub beneficiary: Address,
+    pub arbiter: Address,
+    pub amount: i128,
+    pub state: EscrowState,
+}}
+
+#[derive(Clone)]
+#[contracttype]
+pub enum DataKey {{
+    Escrow,
+}}
+
+#[contract]
+pub struct {pascal};
+
+#[contractimpl]
+impl {pascal} {{
+    pub fn deposit(env: Env, depositor: Address, beneficiary: Address, arbiter: Address, amount: i128) {{
+        depositor.require_auth();
+        if env.storage().instance().has(&DataKey::Escrow) {{
+            panic!("escrow already initialized");
+        }}
+        env.storage().instance().set(&DataKey::Escrow, &Escrow {{
+            depositor,
+            beneficiary,
+            arbiter,
+            amount,
+            state: EscrowState::Pending,
+        }});
+    }}
+
+    pub fn release(env: Env) {{
+        let mut escrow: Escrow = env.storage().instance().get(&DataKey::Escrow).unwrap();
+        escrow.arbiter.require_auth();
+        if escrow.state != EscrowState::Pending {{ panic!("escrow not pending"); }}
+        escrow.state = EscrowState::Released;
+        env.storage().instance().set(&DataKey::Escrow, &escrow);
+    }}
+
+    pub fn refund(env: Env) {{
+        let mut escrow: Escrow = env.storage().instance().get(&DataKey::Escrow).unwrap();
+        escrow.arbiter.require_auth();
+        if escrow.state != EscrowState::Pending {{ panic!("escrow not pending"); }}
+        escrow.state = EscrowState::Refunded;
+        env.storage().instance().set(&DataKey::Escrow, &escrow);
+    }}
+
+    pub fn state(env: Env) -> EscrowState {{
+        let escrow: Escrow = env.storage().instance().get(&DataKey::Escrow).unwrap();
+        escrow.state
+    }}
+}}
+
+#[cfg(test)]
+mod test {{
+    use super::*;
+    use soroban_sdk::testutils::Address as _;
+
+    #[test]
+    fn test_escrow_release() {{
+        let env = Env::default();
+        let id = env.register_contract(None, {pascal});
+        let client = {pascal}Client::new(&env, &id);
+        let depositor = Address::generate(&env);
+        let beneficiary = Address::generate(&env);
+        let arbiter = Address::generate(&env);
+        env.mock_all_auths();
+        client.deposit(&depositor, &beneficiary, &arbiter, &500);
+        client.release();
+        assert_eq!(client.state(), EscrowState::Released);
+    }}
+
+    #[test]
+    fn test_escrow_refund() {{
+        let env = Env::default();
+        let id = env.register_contract(None, {pascal});
+        let client = {pascal}Client::new(&env, &id);
+        let depositor = Address::generate(&env);
+        let beneficiary = Address::generate(&env);
+        let arbiter = Address::generate(&env);
+        env.mock_all_auths();
+        client.deposit(&depositor, &beneficiary, &arbiter, &500);
+        client.refund();
+        assert_eq!(client.state(), EscrowState::Refunded);
     }}
 }}
 "#, pascal = pascal)

@@ -1,6 +1,6 @@
 mod commands;
-mod utils;
 pub mod plugins;
+mod utils;
 
 use clap::{Parser, Subcommand};
 use colored::*;
@@ -10,7 +10,7 @@ use colored::*;
     name = "starforge",
     about = "⚡ Stellar & Soroban developer productivity CLI",
     long_about = "starforge is an open-source CLI toolkit for developers building on the Stellar network.\nManage wallets, deploy Soroban contracts, and scaffold new projects — all from your terminal.",
-    version = "0.1.0",
+    version = "0.1.0"
 )]
 struct Cli {
     #[command(subcommand)]
@@ -48,7 +48,7 @@ enum Commands {
     /// Show starforge config and environment info
     Info,
 
-    Tx(commands::tx::TxArgs),   // fetch transaction for the account
+    Tx(commands::tx::TxArgs), // fetch transaction for the account
 
     /// View or switch the active network (testnet/mainnet)
     #[command(subcommand)]
@@ -97,10 +97,8 @@ fn main() {
     let cli = Cli::parse();
 
     // Initialise structured logging before anything else runs.
-    let log_cfg = utils::logging::config_from_env(
-        Some(cli.log_format.as_str()),
-        cli.log_dir.clone(),
-    );
+    let log_cfg =
+        utils::logging::config_from_env(Some(cli.log_format.as_str()), cli.log_dir.clone());
     if let Err(e) = utils::logging::init(log_cfg) {
         eprintln!("Warning: failed to initialise logger: {}", e);
     }
@@ -129,16 +127,17 @@ fn main() {
         Commands::Template(_) => "template",
         Commands::Upgrade(_) => "upgrade",
         Commands::External(_) => "external",
-    }.to_string();
+    }
+    .to_string();
 
     let start = std::time::Instant::now();
     let result = match cli.command {
-        Commands::Wallet(cmd)  => commands::wallet::handle(cmd),
-        Commands::New(cmd)     => commands::new::handle(cmd),
+        Commands::Wallet(cmd) => commands::wallet::handle(cmd),
+        Commands::New(cmd) => commands::new::handle(cmd),
         Commands::Contract(cmd) => commands::contract::handle(cmd),
-        Commands::Inspect(cmd)  => commands::inspect::handle(cmd),
+        Commands::Inspect(cmd) => commands::inspect::handle(cmd),
         Commands::Deploy(args) => commands::deploy::handle(args),
-        Commands::Info         => commands::info::handle(),
+        Commands::Info => commands::info::handle(),
         Commands::Tx(args) => commands::tx::handle(args),
         Commands::Network(cmd) => commands::network::handle(cmd),
         Commands::Completions(shell) => commands::completions::handle(shell),
@@ -155,10 +154,13 @@ fn main() {
     };
     let duration = start.elapsed();
 
-    let _ = utils::telemetry::track_event(&command_name, serde_json::json!({
-        "success": result.is_ok(),
-        "duration_ms": duration.as_millis(),
-    }));
+    let _ = utils::telemetry::track_event(
+        &command_name,
+        serde_json::json!({
+            "success": result.is_ok(),
+            "duration_ms": duration.as_millis(),
+        }),
+    );
 
     if let Err(e) = result {
         eprintln!("\n  {} {}\n", "✗ Error:".red().bold(), e);
@@ -192,7 +194,8 @@ fn handle_external_plugin(args: Vec<String>) -> anyhow::Result<()> {
         }
     }
 
-    pm.execute(plugin_name, plugin_args).map_err(|e| anyhow::anyhow!(e))
+    pm.execute(plugin_name, plugin_args)
+        .map_err(|e| anyhow::anyhow!(e))
 }
 
 fn print_banner() {

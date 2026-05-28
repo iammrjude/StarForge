@@ -71,3 +71,11 @@ pub fn progress_bar(total: u64, msg: &str) -> ProgressBar {
 pub fn multi_progress() -> MultiProgress {
     MultiProgress::new()
 }
+
+pub fn verified_badge(verified: bool) -> colored::ColoredString {
+    if verified {
+        " ✓ verified".green()
+    } else {
+        "".normal()
+    }
+}

@@ -1,12 +1,47 @@
 use crate::utils::{config, crypto, hardware_wallet, horizon, multisig, print as p};
-use anyhow::Result;
+use anyhow::{Context, Result};
 use chrono::Utc;
 use clap::Subcommand;
 use colored::*;
 use ed25519_dalek::{Signer, SigningKey};
 use rand::RngCore;
-use stellar_strkey::ed25519::{PrivateKey as StellarPrivateKey, PublicKey as StellarPublicKey};
+use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
+use std::fs;
 use std::path::PathBuf;
+use stellar_strkey::ed25519::{PrivateKey as StellarPrivateKey, PublicKey as StellarPublicKey};
+
+const WALLET_BACKUP_VERSION: &str = "1";
+
+#[derive(Debug, Serialize, Deserialize)]
+struct WalletBackup {
+    version: String,
+    exported_at: String,
+    wallets: Vec<WalletBackupEntry>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct WalletBackupEntry {
+    name: String,
+    public_key: String,
+    secret_key: Option<String>,
+    network: String,
+    created_at: String,
+    funded: bool,
+}
+
+impl From<&config::WalletEntry> for WalletBackupEntry {
+    fn from(entry: &config::WalletEntry) -> Self {
+        Self {
+            name: entry.name.clone(),
+            public_key: entry.public_key.clone(),
+            secret_key: entry.secret_key.clone(),
+            network: entry.network.clone(),
+            created_at: entry.created_at.clone(),
+            funded: entry.funded,
+        }
+    }
+}
 
 #[derive(Subcommand)]
 pub enum WalletCommands {
@@ -14,7 +49,7 @@ pub enum WalletCommands {
     Create {
         /// A friendly name for the wallet (e.g. "alice", "deployer")
         name: String,
-        /// Fund the wallet via Friendbot immediately (testnet only)
+        /// Fund the wallet via network-specific faucet immediately when available
         #[arg(long, default_value = "false")]
         fund: bool,
         /// Network to associate with this wallet (overrides global config)
@@ -34,7 +69,7 @@ pub enum WalletCommands {
         #[arg(long, default_value = "false")]
         reveal: bool,
     },
-    /// Fund a wallet via Friendbot (testnet only)
+    /// Fund a wallet via a configured network faucet
     Fund {
         /// Wallet name to fund
         name: String,
@@ -45,9 +80,34 @@ pub enum WalletCommands {
         name: String,
     },
     /// Rename a wallet
-    Rename {
-        old_name: String,
-        new_name: String,
+    Rename { old_name: String, new_name: String },
+    /// Rotate a wallet in place while keeping the same logical name
+    Rotate {
+        /// Wallet name to rotate
+        name: String,
+        /// Fund the new wallet via Friendbot immediately (testnet only)
+        #[arg(long, default_value = "false")]
+        fund: bool,
+        /// Network to associate with the rotated wallet (overrides stored wallet network)
+        #[arg(long, value_parser = ["testnet", "mainnet"])]
+        network: Option<String>,
+        /// Encrypt the replacement secret key with a passphrase at rest
+        #[arg(long, default_value = "false")]
+        encrypt: bool,
+    },
+    /// Export a wallet to a JSON backup file
+    Export {
+        /// Wallet name to export
+        name: String,
+        /// Output file path for the backup JSON
+        #[arg(long)]
+        output: PathBuf,
+    },
+    /// Import wallets from a JSON backup file
+    Import {
+        /// Path to backup JSON file
+        #[arg(long)]
+        file: PathBuf,
     },
 
     /// Connect to a hardware wallet (Ledger/Trezor) and show device info
@@ -105,6 +165,9 @@ pub enum MultisigCommands {
         /// Override network for this config
         #[arg(long)]
         network: Option<String>,
+        /// Optional file path to write a setup transaction JSON/XDR payload
+        #[arg(long)]
+        xdr_output: Option<PathBuf>,
     },
     /// Sign a multi-sig transaction JSON with all available local signer keys
     ///
@@ -142,25 +205,46 @@ pub enum MultisigCommands {
 
 pub fn handle(cmd: WalletCommands) -> Result<()> {
     match cmd {
-        WalletCommands::Create { name, fund, network, encrypt } => create(name, fund, network, encrypt),
-        WalletCommands::List                  => list(),
+        WalletCommands::Create {
+            name,
+            fund,
+            network,
+            encrypt,
+        } => create(name, fund, network, encrypt),
+        WalletCommands::List => list(),
         WalletCommands::Show { name, reveal } => show(name, reveal),
         WalletCommands::Fund { name } => fund_wallet(name),
         WalletCommands::Remove { name } => remove(name),
         WalletCommands::Rename { old_name, new_name } => rename(old_name, new_name),
+        WalletCommands::Rotate {
+            name,
+            fund,
+            network,
+            encrypt,
+        } => rotate_wallet(name, fund, network, encrypt),
+        WalletCommands::Export { name, output } => export_wallet(name, output),
+        WalletCommands::Import { file } => import_wallets(file),
         WalletCommands::Connect { device } => connect_hardware(device),
         WalletCommands::HwAddress { device, path } => hw_address(device, &path),
         WalletCommands::HwStatus { device } => hw_status(device),
-        WalletCommands::Sign { name, message, hardware } => sign_message(name, message, hardware),
+        WalletCommands::Sign {
+            name,
+            message,
+            hardware,
+        } => sign_message(name, message, hardware),
         WalletCommands::Multisig(cmd) => handle_multisig(cmd),
     }
 }
 
 fn connect_hardware(device: hardware_wallet::HardwareWalletKind) -> Result<()> {
-    p::header("Hardware Wallet — Connect");
-    p::step(1, 3, &format!("Initializing HID subsystem for {}…", device));
+    p::header("Hardware Wallet â€” Connect");
+    p::step(1, 3, &format!("Initializing HID subsystem for {}â€¦", device));
     let info = hardware_wallet::connect(device)?;
-    p::step(2, 3, &format!("{} HID device(s) visible", info.device_count));
+    p::step(
+        2,
+        3,
+        &format!("{} HID device(s) visible", info.device_count),
+    );
     p::step(3, 3, "Connection verified");
     println!();
     p::success(&format!("{} connected", device));
@@ -171,8 +255,12 @@ fn connect_hardware(device: hardware_wallet::HardwareWalletKind) -> Result<()> {
 }
 
 fn hw_address(device: hardware_wallet::HardwareWalletKind, path: &str) -> Result<()> {
-    p::header("Hardware Wallet — Stellar Address");
-    p::step(1, 2, &format!("Requesting address from {} at {}", device, path));
+    p::header("Hardware Wallet â€” Stellar Address");
+    p::step(
+        1,
+        2,
+        &format!("Requesting address from {} at {}", device, path),
+    );
     let address = hardware_wallet::get_stellar_address(device, path)?;
     p::step(2, 2, "Address received");
     println!();
@@ -183,7 +271,7 @@ fn hw_address(device: hardware_wallet::HardwareWalletKind, path: &str) -> Result
 }
 
 fn hw_status(device: hardware_wallet::HardwareWalletKind) -> Result<()> {
-    p::header("Hardware Wallet — Status");
+    p::header("Hardware Wallet â€” Status");
     let status = hardware_wallet::device_status(device)?;
     p::kv("Status", &status);
     Ok(())
@@ -225,7 +313,8 @@ fn sign_message(
         sk.clone()
     } else {
         let pwd = crypto::prompt_password(&format!("Enter password for wallet '{}'", name), false)?;
-        crypto::decrypt_secret(&pwd, sk).map_err(|_| anyhow::anyhow!("Incorrect password or unable to decrypt."))?
+        crypto::decrypt_secret(&pwd, sk)
+            .map_err(|_| anyhow::anyhow!("Incorrect password or unable to decrypt."))?
     };
 
     let decoded_secret = StellarPrivateKey::from_string(&plain_sk)?;
@@ -267,7 +356,7 @@ fn create(name: String, fund: bool, network_override: Option<String>, encrypt: b
     let steps = if fund { 3 } else { 2 };
     p::header(&format!("Creating wallet '{}'", name));
 
-    p::step(1, steps, "Generating keypair…");
+    p::step(1, steps, "Generating keypairâ€¦");
     let (public_key, secret_key) = generate_keypair();
     println!();
     p::kv_accent("Public Key", &public_key);
@@ -280,11 +369,15 @@ fn create(name: String, fund: bool, network_override: Option<String>, encrypt: b
         secret_key.clone()
     };
 
-    let status = if encrypt { "Encrypted and safely stored." } else { "Stored in plaintext (not recommended for mainnet)." };
+    let status = if encrypt {
+        "Encrypted and safely stored."
+    } else {
+        "Stored in plaintext (not recommended for mainnet)."
+    };
     p::kv("Secret Key", status);
     println!();
 
-    p::step(2, steps, "Saving to ~/.starforge/config.toml…");
+    p::step(2, steps, "Saving to ~/.starforge/config.tomlâ€¦");
     let wallet = config::WalletEntry {
         name: name.clone(),
         public_key: public_key.clone(),
@@ -296,16 +389,17 @@ fn create(name: String, fund: bool, network_override: Option<String>, encrypt: b
     cfg.wallets.push(wallet);
 
     if fund {
-        if network == "mainnet" {
+        let net_cfg = config::get_network_config(&cfg, &network)?;
+        if net_cfg.friendbot_url.is_none() && network == "mainnet" {
             p::warn("Friendbot is not available on Mainnet. Skipping fund step.");
         } else {
-            p::step(3, steps, "Funding via Friendbot…");
-            match horizon::fund_account(&public_key) {
+            p::step(3, steps, "Funding via network faucet…");
+            match horizon::fund_account(&public_key, &network) {
                 Ok(_) => {
                     if let Some(w) = cfg.wallets.iter_mut().find(|w| w.name == name) {
                         w.funded = true;
                     }
-                    p::success("Funded with 10,000 XLM on testnet");
+                    p::success("Account funded via configured faucet");
                 }
                 Err(e) => p::warn(&format!("Funding failed: {}", e)),
             }
@@ -356,7 +450,7 @@ fn list() -> Result<()> {
     p::separator();
     p::kv(
         &format!("{} wallet(s)", cfg.wallets.len()),
-        &format!("on {} — {}", cfg.network, config::config_path().display()),
+        &format!("on {} â€” {}", cfg.network, config::config_path().display()),
     );
 
     Ok(())
@@ -381,7 +475,10 @@ fn show(name: String, reveal: bool) -> Result<()> {
                 p::warn("Warning: This wallet is using an unencrypted legacy key!");
                 p::kv("Secret Key", sk);
             } else {
-                let pwd = crypto::prompt_password(&format!("Enter password for wallet '{}'", name), false)?;
+                let pwd = crypto::prompt_password(
+                    &format!("Enter password for wallet '{}'", name),
+                    false,
+                )?;
                 match crypto::decrypt_secret(&pwd, sk) {
                     Ok(plain_sk) => p::kv("Secret Key", &plain_sk),
                     Err(_) => anyhow::bail!("Incorrect password or unable to decrypt."),
@@ -398,9 +495,16 @@ fn show(name: String, reveal: bool) -> Result<()> {
     p::kv("Network", &w.network);
     p::kv("Funded", if w.funded { "yes" } else { "no" });
     p::kv("Created", &w.created_at);
+    if !w.rotation_history.is_empty() {
+        p::kv("Rotations", &w.rotation_history.len().to_string());
+        if let Some(last_rotation) = w.rotation_history.last() {
+            p::kv("Previous Key", &last_rotation.previous_public_key);
+            p::kv("Rotated At", &last_rotation.rotated_at);
+        }
+    }
     p::separator();
 
-    p::info(&format!("Fetching live balance on {}…", w.network));
+    p::info(&format!("Fetching live balance on {}â€¦", w.network));
     match horizon::fetch_account(&w.public_key, &w.network) {
         Ok(account) => {
             println!();
@@ -421,7 +525,10 @@ fn fund_wallet(name: String) -> Result<()> {
     let mut cfg = config::load()?;
 
     if cfg.network == "mainnet" {
-        anyhow::bail!("Friendbot is not available on Mainnet.");
+        let net_cfg = config::get_network_config(&cfg, &cfg.network)?;
+        if net_cfg.friendbot_url.is_none() {
+            anyhow::bail!("Friendbot is not available on Mainnet.");
+        }
     }
 
     let public_key = cfg
@@ -431,8 +538,8 @@ fn fund_wallet(name: String) -> Result<()> {
         .map(|w| w.public_key.clone())
         .ok_or_else(|| anyhow::anyhow!("Wallet '{}' not found", name))?;
 
-    p::info(&format!("Funding '{}' via Friendbot…", name));
-    horizon::fund_account(&public_key)?;
+    p::info(&format!("Funding '{}' via configured network faucet…", name));
+    horizon::fund_account(&public_key, &cfg.network)?;
 
     if let Some(w) = cfg.wallets.iter_mut().find(|w| w.name == name) {
         w.funded = true;
@@ -462,7 +569,7 @@ fn remove(name: String) -> Result<()> {
 fn rename(old_name: String, new_name: String) -> Result<()> {
     config::validate_wallet_name(&old_name)?;
     config::validate_wallet_name(&new_name)?;
-    
+
     let mut cfg = config::load()?;
     if !cfg.wallets.iter().any(|w| w.name == old_name) {
         anyhow::bail!("No wallet named '{}' found", old_name);
@@ -477,10 +584,192 @@ fn rename(old_name: String, new_name: String) -> Result<()> {
 
     config::save(&cfg)?;
     println!();
-    p::success(&format!("Wallet renamed: '{}' → '{}'", old_name, new_name));
+    p::success(&format!("Wallet renamed: '{}' ? '{}'", old_name, new_name));
     p::info(&format!(
         "View it with: {}",
         format!("starforge wallet show {}", new_name).cyan()
+    ));
+    Ok(())
+}
+
+fn rotate_wallet(
+    name: String,
+    fund: bool,
+    network_override: Option<String>,
+    encrypt: bool,
+) -> Result<()> {
+    config::validate_wallet_name(&name)?;
+    let mut cfg = config::load()?;
+    let wallet_index = cfg
+        .wallets
+        .iter()
+        .position(|wallet| wallet.name == name)
+        .ok_or_else(|| anyhow::anyhow!("Wallet '{}' not found", name))?;
+
+    let stored_network = cfg.wallets[wallet_index].network.clone();
+    let original_public_key = cfg.wallets[wallet_index].public_key.clone();
+    let original_funded = cfg.wallets[wallet_index].funded;
+    let network = network_override.unwrap_or(stored_network);
+
+    let steps = if fund { 3 } else { 2 };
+    p::header(&format!("Rotating wallet '{}'", name));
+    p::kv("Old Public Key", &original_public_key);
+    p::kv("Network", &network);
+
+    p::step(1, steps, "Generating replacement keypair...");
+    let (public_key, secret_key) = generate_keypair();
+
+    let secret_to_store = if encrypt {
+        let pwd =
+            crypto::prompt_password("Set a secure passphrase to encrypt the rotated wallet", true)?;
+        crypto::encrypt_secret(&pwd, &secret_key)?
+    } else {
+        secret_key.clone()
+    };
+
+    p::step(2, steps, "Archiving previous public key in config metadata...");
+    {
+        let wallet = &mut cfg.wallets[wallet_index];
+        wallet.rotation_history.push(config::WalletRotationRecord {
+            rotated_at: Utc::now().to_rfc3339(),
+            previous_public_key: original_public_key.clone(),
+            previous_network: wallet.network.clone(),
+            previous_funded: wallet.funded,
+        });
+        wallet.public_key = public_key.clone();
+        wallet.secret_key = Some(secret_to_store);
+        wallet.network = network.clone();
+        wallet.funded = false;
+    }
+
+    if fund {
+        if network == "mainnet" {
+            p::warn("Friendbot is not available on Mainnet. Skipping fund step.");
+        } else {
+            p::step(3, steps, "Funding the replacement wallet via Friendbot...");
+            match horizon::fund_account(&public_key) {
+                Ok(_) => {
+                    if let Some(wallet) = cfg.wallets.iter_mut().find(|wallet| wallet.name == name)
+                    {
+                        wallet.funded = true;
+                    }
+                    p::success("Replacement wallet funded on testnet");
+                }
+                Err(e) => p::warn(&format!("Funding failed: {}", e)),
+            }
+        }
+    }
+
+    config::save(&cfg)?;
+
+    println!();
+    p::success(&format!("Wallet '{}' rotated", name));
+    p::kv_accent("New Public Key", &public_key);
+    p::warn(
+        "The wallet name stayed the same, but the on-chain account changed. Update any funding, signer, or deploy flows that referenced the old public key.",
+    );
+    if original_funded {
+        p::info("The previous key remains an on-chain account; rotation only updates the local wallet mapping.");
+    }
+    Ok(())
+}
+
+fn export_wallet(name: String, output: PathBuf) -> Result<()> {
+    config::validate_wallet_name(&name)?;
+    let cfg = config::load()?;
+    let wallet = cfg
+        .wallets
+        .iter()
+        .find(|w| w.name == name)
+        .ok_or_else(|| anyhow::anyhow!("Wallet '{}' not found", name))?;
+
+    if output.exists() && output.is_dir() {
+        anyhow::bail!("Output path is a directory: {}", output.display());
+    }
+
+    if let Some(parent) = output.parent() {
+        if !parent.as_os_str().is_empty() {
+            fs::create_dir_all(parent)
+                .with_context(|| format!("Failed to create {}", parent.display()))?;
+        }
+    }
+
+    let backup = WalletBackup {
+        version: WALLET_BACKUP_VERSION.to_string(),
+        exported_at: Utc::now().to_rfc3339(),
+        wallets: vec![WalletBackupEntry::from(wallet)],
+    };
+
+    let contents = serde_json::to_string_pretty(&backup)
+        .with_context(|| "Failed to serialize wallet backup")?;
+    fs::write(&output, contents)
+        .with_context(|| format!("Failed to write {}", output.display()))?;
+
+    p::success(&format!("Wallet '{}' exported", name));
+    p::kv("Backup file", &output.display().to_string());
+    p::info("Secrets are only stored in the backup file; they are not printed to stdout.");
+    Ok(())
+}
+
+fn import_wallets(file: PathBuf) -> Result<()> {
+    config::validate_file_path(&file, Some("json"))?;
+    let contents =
+        fs::read_to_string(&file).with_context(|| format!("Failed to read {}", file.display()))?;
+    let backup: WalletBackup =
+        serde_json::from_str(&contents).with_context(|| "Invalid backup JSON format")?;
+
+    if backup.version != WALLET_BACKUP_VERSION {
+        anyhow::bail!(
+            "Unsupported backup version '{}'. Expected '{}'.",
+            backup.version,
+            WALLET_BACKUP_VERSION
+        );
+    }
+
+    if backup.wallets.is_empty() {
+        anyhow::bail!("Backup file contains no wallets.");
+    }
+
+    let mut seen = HashSet::new();
+    for wallet in &backup.wallets {
+        if !seen.insert(wallet.name.clone()) {
+            anyhow::bail!("Duplicate wallet '{}' in backup file", wallet.name);
+        }
+    }
+
+    let mut cfg = config::load()?;
+
+    for wallet in &backup.wallets {
+        config::validate_wallet_name(&wallet.name)?;
+        config::validate_public_key(&wallet.public_key)?;
+        if let Some(secret) = &wallet.secret_key {
+            config::validate_secret_key(secret)?;
+        }
+        config::validate_network_exists(&cfg, &wallet.network)?;
+
+        if cfg.wallets.iter().any(|w| w.name == wallet.name) {
+            anyhow::bail!("Wallet '{}' already exists", wallet.name);
+        }
+    }
+
+    let imported = backup.wallets.len();
+    for wallet in backup.wallets {
+        cfg.wallets.push(config::WalletEntry {
+            name: wallet.name,
+            public_key: wallet.public_key,
+            secret_key: wallet.secret_key,
+            network: wallet.network,
+            created_at: wallet.created_at,
+            funded: wallet.funded,
+            rotation_history: Vec::new(),
+        });
+    }
+
+    config::save(&cfg)?;
+    p::success(&format!(
+        "Imported {} wallet(s) from {}",
+        imported,
+        file.display()
     ));
     Ok(())
 }
@@ -525,24 +814,46 @@ mod tests {
 
 fn handle_multisig(cmd: MultisigCommands) -> Result<()> {
     match cmd {
-        MultisigCommands::Create { name, threshold, signers, network } => multisig_create(name, threshold, signers, network),
-        MultisigCommands::Sign { name, transaction, output } => multisig_sign(name, transaction, output),
+        MultisigCommands::Create {
+            name,
+            threshold,
+            signers,
+            network,
+            xdr_output,
+        } => multisig_create(name, threshold, signers, network, xdr_output),
+        MultisigCommands::Sign {
+            name,
+            transaction,
+            output,
+        } => multisig_sign(name, transaction, output),
         MultisigCommands::List => multisig_list(),
         MultisigCommands::Show { name } => multisig_show(name),
-        MultisigCommands::Submit { name, transaction, network } => multisig_submit(name, transaction, network),
+        MultisigCommands::Submit {
+            name,
+            transaction,
+            network,
+        } => multisig_submit(name, transaction, network),
     }
 }
 
-fn multisig_create(name: String, threshold: u8, signers: String, network: Option<String>) -> Result<()> {
+fn multisig_create(
+    name: String,
+    threshold: u8,
+    signers: String,
+    network: Option<String>,
+    xdr_output: Option<PathBuf>,
+) -> Result<()> {
     config::validate_wallet_name(&name)?;
     multisig::validate_threshold(threshold)?;
 
     let cfg = config::load()?;
-    let wallet = cfg
-        .wallets
-        .iter()
-        .find(|w| w.name == name)
-        .ok_or_else(|| anyhow::anyhow!("Wallet '{}' not found. Create it first with `starforge wallet create {}`", name, name))?;
+    let wallet = cfg.wallets.iter().find(|w| w.name == name).ok_or_else(|| {
+        anyhow::anyhow!(
+            "Wallet '{}' not found. Create it first with `starforge wallet create {}`",
+            name,
+            name
+        )
+    })?;
 
     let network = network.unwrap_or_else(|| wallet.network.clone());
     config::validate_network(&network)?;
@@ -560,9 +871,13 @@ fn multisig_create(name: String, threshold: u8, signers: String, network: Option
     let mut signer_entries = Vec::new();
     for signer_name in signer_names {
         config::validate_wallet_name(&signer_name)?;
-        let signer_wallet = cfg.wallets.iter().find(|w| w.name == signer_name).ok_or_else(|| {
-            anyhow::anyhow!("Signer wallet '{}' not found in local config", signer_name)
-        })?;
+        let signer_wallet = cfg
+            .wallets
+            .iter()
+            .find(|w| w.name == signer_name)
+            .ok_or_else(|| {
+                anyhow::anyhow!("Signer wallet '{}' not found in local config", signer_name)
+            })?;
         signer_entries.push(multisig::Signer {
             public_key: signer_wallet.public_key.clone(),
             weight: 1,
@@ -571,7 +886,11 @@ fn multisig_create(name: String, threshold: u8, signers: String, network: Option
     }
 
     let total_weight = multisig::calculate_total_weight(&signer_entries);
-    let thresholds = multisig::Thresholds { low: threshold, medium: threshold, high: threshold };
+    let thresholds = multisig::Thresholds {
+        low: threshold,
+        medium: threshold,
+        high: threshold,
+    };
     multisig::validate_thresholds(&thresholds, total_weight)?;
 
     let account = multisig::MultiSigAccount {
@@ -583,6 +902,7 @@ fn multisig_create(name: String, threshold: u8, signers: String, network: Option
     };
 
     multisig::save_account(&account)?;
+    let setup_steps = multisig::build_stellar_cli_steps(&account, &network);
 
     println!();
     p::header(&format!("Multi-sig: {}", name));
@@ -591,7 +911,27 @@ fn multisig_create(name: String, threshold: u8, signers: String, network: Option
     p::kv("Network", &network);
     p::kv("Threshold", &threshold.to_string());
     p::kv("Signers", &account.signers.len().to_string());
-    p::info("Sign with: starforge wallet multisig sign <name> --transaction tx.json");
+    if let Some(path) = xdr_output {
+        let setup_tx = multisig::build_account_setup_transaction(&account, &network)?;
+        multisig::save_transaction(&path, &setup_tx)?;
+        p::kv("Setup XDR JSON", &path.display().to_string());
+    }
+    println!();
+    p::info("Next steps to configure the account on-chain:");
+    for (index, step) in setup_steps.iter().enumerate() {
+        println!("  {}. {}", index + 1, step.title);
+        println!("     {}", step.command.cyan());
+    }
+    println!();
+    p::info("After your account is updated on-chain, collect signatures with:");
+    println!(
+        "  {}",
+        format!(
+            "starforge wallet multisig sign {} --transaction tx.json",
+            account.name
+        )
+        .cyan()
+    );
     Ok(())
 }
 
@@ -612,7 +952,9 @@ fn multisig_sign(name: String, transaction: PathBuf, output: Option<PathBuf>) ->
     let mut signed = 0u32;
     for s in &account.signers {
         let wallet_name = s.name.clone().unwrap_or_else(|| s.public_key.clone());
-        let Some(w) = cfg.wallets.iter().find(|w| w.public_key == s.public_key) else { continue };
+        let Some(w) = cfg.wallets.iter().find(|w| w.public_key == s.public_key) else {
+            continue;
+        };
         let Some(sk) = &w.secret_key else { continue };
 
         let plain_sk = if !sk.contains(':') && sk.starts_with('S') && sk.len() == 56 {
@@ -685,7 +1027,7 @@ fn multisig_show(name: String) -> Result<()> {
     p::separator();
     p::kv_accent("Account ID", &multisig_account.account_id);
     p::kv("Created", &multisig_account.created_at);
-    
+
     println!();
     p::info("Thresholds:");
     p::kv("  Low", &multisig_account.thresholds.low.to_string());
@@ -694,7 +1036,7 @@ fn multisig_show(name: String) -> Result<()> {
 
     println!();
     p::info(&format!("Signers ({}):", multisig_account.signers.len()));
-    
+
     if multisig_account.signers.is_empty() {
         p::warn("  No signers configured yet");
     } else {
@@ -740,16 +1082,20 @@ fn multisig_submit(name: String, transaction: PathBuf, network: Option<String>) 
         );
     }
 
-    p::step(1, 2, "Combining signatures into final envelope…");
+    p::step(1, 2, "Combining signatures into final envelopeâ€¦");
     let signed_xdr = multisig::combine_signatures(&tx.transaction_xdr, &tx.signatures)?;
 
-    p::step(2, 2, &format!("Submitting to Horizon ({})…", network));
+    p::step(2, 2, &format!("Submitting to Horizon ({})â€¦", network));
     let result = horizon::submit_multisig_transaction(&signed_xdr, &network)?;
 
     println!();
     p::success("Transaction submitted");
     p::kv_accent("Hash", &result.hash);
     p::kv("Successful", &result.successful.to_string());
-    p::info(&format!("View on explorer: https://stellar.expert/explorer/{}/tx/{}", network, result.hash));
+    p::info(&format!(
+        "View on explorer: https://stellar.expert/explorer/{}/tx/{}",
+        network, result.hash
+    ));
     Ok(())
 }
+

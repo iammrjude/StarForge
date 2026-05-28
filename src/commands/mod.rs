@@ -1,3 +1,4 @@
+pub mod benchmark;
 pub mod completions;
 pub mod contract;
 pub mod deploy;
@@ -12,8 +13,7 @@ pub mod plugin;
 pub mod shell;
 pub mod template;
 pub mod test;
-pub mod tx;
-pub mod wallet;
 pub mod tutorial;
-pub mod benchmark;
+pub mod tx;
 pub mod upgrade;
+pub mod wallet;

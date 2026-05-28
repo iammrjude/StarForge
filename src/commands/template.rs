@@ -147,25 +147,29 @@ fn list() -> Result<()> {
     Ok(())
 }
 
-fn search(query: String, tags: Option<String>) -> Result<()> {
-    let tags_filter: Option<Vec<String>> = tags.map(|t| {
-        t.split(',')
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty())
-            .collect()
-    });
-    
-    let results = templates::search_templates(&query, tags_filter.as_deref())?;
+fn search(query: String) -> Result<()> {
+    let results = templates::search_templates(&query, None)?;
     p::header(&format!("Template search results for '{}'", query));
     if results.is_empty() {
         p::info("No templates matched that query.");
         return Ok(());
     }
 
+    p::info(&format!("Found {} result(s), ranked by popularity:", results.len()));
+    println!();
+
     for (i, template) in results.iter().enumerate() {
-        println!("  {:>2}. {}@{}", i + 1, template.name, template.version);
+        let badge = p::verified_badge(template.verified);
+        println!(
+            "  {:>2}. {}@{}{}",
+            i + 1,
+            template.name.cyan().bold(),
+            template.version,
+            badge
+        );
         p::kv("Description", &template.description);
-        p::kv("Source", &template.source.to_string());
+        p::kv("Downloads", &template.downloads.to_string());
+        p::kv("Source", &template.source);
         if !template.tags.is_empty() {
             p::kv("Tags", &template.tags.join(", "));
         }

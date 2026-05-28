@@ -14,7 +14,7 @@
       },
       "created_at": "2025-01-01T00:00:00Z",
       "updated_at": "2025-01-01T00:00:00Z",
-      "downloads": 0,
+      "downloads": 1240,
       "verified": true
     },
     {
@@ -30,7 +30,7 @@
       },
       "created_at": "2025-01-01T00:00:00Z",
       "updated_at": "2025-01-01T00:00:00Z",
-      "downloads": 0,
+      "downloads": 874,
       "verified": true
     },
     {
@@ -46,8 +46,8 @@
       },
       "created_at": "2025-01-01T00:00:00Z",
       "updated_at": "2025-01-01T00:00:00Z",
-      "downloads": 0,
-      "verified": true
+      "downloads": 512,
+      "verified": false
     },
     {
       "name": "multisig-wallet",
@@ -62,8 +62,8 @@
       },
       "created_at": "2025-01-01T00:00:00Z",
       "updated_at": "2025-01-01T00:00:00Z",
-      "downloads": 0,
-      "verified": true
+      "downloads": 389,
+      "verified": false
     }
   ]
 }

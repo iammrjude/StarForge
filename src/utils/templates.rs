@@ -38,7 +38,8 @@ pub struct TemplateEntry {
     pub description: String,
     pub author: String,
     pub version: String,
-    pub source: TemplateSource,
+    pub author: String,
+    pub source: String,
     #[serde(default)]
     pub tags: Vec<String>,
     #[serde(default)]
@@ -47,10 +48,6 @@ pub struct TemplateEntry {
     pub downloads: u64,
     #[serde(default)]
     pub verified: bool,
-    #[serde(default)]
-    pub created_at: String,
-    #[serde(default)]
-    pub updated_at: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]

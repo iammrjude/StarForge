@@ -1,12 +1,18 @@
-use anyhow::{Result, Context};
+use crate::utils::config;
+use anyhow::{Context, Result};
 use serde::Deserialize;
 
-pub fn horizon_url(network: &str) -> &'static str {
-    match network {
-        "mainnet" => "https://horizon.stellar.org",
-        "docker-testnet" => "http://localhost:8000",
-        _ => "https://horizon-testnet.stellar.org",
-    }
+pub fn network_config(network: &str) -> Result<config::NetworkConfig> {
+    let cfg = config::load()?;
+    config::get_network_config(&cfg, network)
+}
+
+pub fn horizon_url(network: &str) -> Result<String> {
+    Ok(network_config(network)?.horizon_url)
+}
+
+pub fn friendbot_url(network: &str) -> Result<Option<String>> {
+    Ok(network_config(network)?.friendbot_url)
 }
 
 #[derive(Debug, Deserialize)]
@@ -26,10 +32,13 @@ pub struct Balance {
     pub asset_code: Option<String>,
 }
 
-pub fn fund_account(public_key: &str) -> Result<()> {
-    let url = format!("https://friendbot.stellar.org?addr={}", public_key);
+pub fn fund_account(public_key: &str, network: &str) -> Result<()> {
+    let friendbot = friendbot_url(network)?
+        .unwrap_or_else(|| "https://friendbot.stellar.org".to_string());
+    let separator = if friendbot.contains('?') { '&' } else { '?' };
+    let url = format!("{}{}addr={}", friendbot, separator, public_key);
     let res = ureq::get(&url).call()
-        .with_context(|| "Friendbot request failed")?;
+        .with_context(|| format!("Friendbot request failed for {}", network))?;
     if res.status() == 200 {
         Ok(())
     } else {
@@ -38,7 +47,8 @@ pub fn fund_account(public_key: &str) -> Result<()> {
 }
 
 pub fn fetch_account(public_key: &str, network: &str) -> Result<AccountResponse> {
-    let url = format!("{}/accounts/{}", horizon_url(network), public_key);
+    let horizon = horizon_url(network)?;
+    let url = format!("{}/accounts/{}", horizon, public_key);
     let res = ureq::get(&url).call()
         .with_context(|| format!("Failed to reach Horizon on {}", network))?;
     if res.status() == 200 {
@@ -51,12 +61,48 @@ pub fn fetch_account(public_key: &str, network: &str) -> Result<AccountResponse>
 }
 
 pub fn check_network(network: &str) -> bool {
-    let url = format!("{}/", horizon_url(network));
-    ureq::get(&url).call().map(|r| r.status() == 200).unwrap_or(false)
+    if let Ok(horizon) = horizon_url(network) {
+        let url = format!("{}/", horizon);
+        ureq::get(&url).call().map(|r| r.status() == 200).unwrap_or(false)
+    } else {
+        false
+    }
+}
+
+pub fn build_transaction_query_url(public_key: &str, network: &str, filter: &TxFilter) -> Result<String> {
+    let horizon = horizon_url(network)?;
+    let mut url = format!(
+        "{}/accounts/{}/transactions?order={}&limit={}",
+        horizon,
+        public_key,
+        filter.order.as_deref().unwrap_or("desc"),
+        filter.limit.min(200)
+    );
+
+    if let Some(ref cursor) = filter.cursor {
+        url.push_str(&format!("&cursor={}", cursor));
+    }
+    if let Some(ref type_filter) = filter.type_filter {
+        url.push_str(&format!("&type={}", type_filter));
+    }
+
+    Ok(url)
 }
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct TransactionRecord {
+    pub hash: String,
+    pub successful: bool,
+    pub operation_count: u32,
+    pub fee_charged: String,
+    pub created_at: String,
+    pub memo_type: Option<String>,
+    pub memo: Option<String>,
+    pub source_account: Option<String>,
+    #[serde(rename = "type")]
+    pub transaction_type: Option<String>,
+    pub paging_token: Option<String>,
+}
     pub hash: String,
     pub successful: bool,
     pub operation_count: u32,
@@ -82,6 +128,8 @@ struct TransactionsEmbedded {
 pub struct TxFilter {
     pub limit: u8,
     pub cursor: Option<String>,
+    pub order: Option<String>,
+    pub type_filter: Option<String>,
     pub after: Option<String>,
     pub before: Option<String>,
     pub successful_only: Option<bool>,
@@ -107,18 +155,7 @@ pub fn fetch_transactions_filtered(
     network: &str,
     filter: TxFilter,
 ) -> Result<Vec<TransactionRecord>> {
-    let limit = filter.limit.min(200);
-    let mut url = format!(
-        "{}/accounts/{}/transactions?order=desc&limit={}",
-        horizon_url(network),
-        public_key,
-        limit
-    );
-
-    if let Some(ref cursor) = filter.cursor {
-        url.push_str(&format!("&cursor={}", cursor));
-    }
-
+    let url = build_transaction_query_url(public_key, network, &filter)?;
     let res = ureq::get(&url).call().with_context(|| {
         format!(
             "Account '{}' not found on {}. Has it been funded?",
@@ -132,7 +169,10 @@ pub fn fetch_transactions_filtered(
 
     let mut records = parsed.embedded.records;
 
-    // Client-side date filtering (Horizon doesn't support date range natively)
+    // Client-side filtering for Horizon features not universally supported
+    if let Some(ref type_filter) = filter.type_filter {
+        records.retain(|tx| tx.transaction_type.as_deref() == Some(type_filter.as_str()));
+    }
     if let Some(ref after) = filter.after {
         records.retain(|tx| tx.created_at.as_str() >= after.as_str());
     }
@@ -182,7 +222,8 @@ pub fn build_and_simulate_payment(
     )?;
     
     // Simulate the transaction
-    let _url = format!("{}/transactions", horizon_url(network));
+    let horizon = horizon_url(network)?;
+    let _url = format!("{}/transactions", horizon);
     let _form_data = format!("tx={}", urlencoding::encode(&tx_xdr));
     
     // For simulation, we'll estimate the fee
@@ -203,7 +244,8 @@ pub fn submit_payment_transaction(
     let signed_xdr = sign_transaction_xdr(transaction_xdr, secret_key, network)?;
     
     // Submit to Horizon
-    let url = format!("{}/transactions", horizon_url(network));
+    let horizon = horizon_url(network)?;
+    let url = format!("{}/transactions", horizon);
     let form_data = format!("tx={}", urlencoding::encode(&signed_xdr));
     
     let res = ureq::post(&url)
@@ -244,7 +286,8 @@ pub fn submit_multisig_transaction(
     network: &str,
 ) -> Result<TransactionSubmitResult> {
     // Submit a pre-signed transaction (e.g. multisig envelope) to Horizon.
-    let url = format!("{}/transactions", horizon_url(network));
+    let horizon = horizon_url(network)?;
+    let url = format!("{}/transactions", horizon);
     let form_data = format!("tx={}", urlencoding::encode(signed_transaction_xdr));
 
     let res = ureq::post(&url)
