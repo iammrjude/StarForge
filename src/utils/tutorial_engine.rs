@@ -106,3 +106,20 @@ pub fn render_step(step: &TutorialStep, index: usize, total: usize) -> String {
     }
     lines.join("\n")
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn render_step_includes_command_hint() {
+        let step = TutorialStep {
+            title: "Check environment".into(),
+            description: "Run info".into(),
+            command: Some("starforge info".into()),
+        };
+        let rendered = render_step(&step, 0, 3);
+        assert!(rendered.contains("Step 1/3"));
+        assert!(rendered.contains("starforge info"));
+    }
+}
