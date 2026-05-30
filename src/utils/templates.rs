@@ -3,6 +3,9 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 
+/// The running StarForge CLI version — used for template compatibility checks.
+pub const CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct TemplateRegistry {
     #[serde(default)]
@@ -91,6 +94,138 @@ pub struct TemplateEntry {
     pub created_at: String,
     #[serde(default)]
     pub updated_at: String,
+    /// Minimum StarForge CLI version required by this template (semver, e.g. "0.1.0").
+    /// `None` means no minimum — the template is compatible with all CLI versions.
+    #[serde(default)]
+    pub cli_version_min: Option<String>,
+    /// Maximum StarForge CLI version supported by this template (semver, e.g. "1.99.99").
+    /// `None` means no upper bound.
+    #[serde(default)]
+    pub cli_version_max: Option<String>,
+}
+
+/// Outcome of a template-vs-CLI compatibility check.
+#[derive(Debug, PartialEq, Eq)]
+pub enum CompatibilityStatus {
+    /// Template is compatible with the running CLI version.
+    Compatible,
+    /// Template requires a newer CLI version than what is running.
+    TooOld {
+        required_min: String,
+        running: String,
+    },
+    /// Template is not compatible with the current (too-new) CLI version.
+    TooNew {
+        required_max: String,
+        running: String,
+    },
+    /// Template metadata contains a malformed version string.
+    MalformedMetadata { reason: String },
+}
+
+/// Parse a semver string `"major.minor.patch"` into `(major, minor, patch)`.
+///
+/// Returns `Err` when the string cannot be parsed.
+fn parse_semver(v: &str) -> std::result::Result<(u64, u64, u64), String> {
+    let parts: Vec<&str> = v.splitn(3, '.').collect();
+    if parts.len() != 3 {
+        return Err(format!("'{}' is not a valid semver string (expected major.minor.patch)", v));
+    }
+    let parse = |s: &str| {
+        s.parse::<u64>()
+            .map_err(|_| format!("non-numeric component '{}' in version '{}'", s, v))
+    };
+    Ok((parse(parts[0])?, parse(parts[1])?, parse(parts[2])?))
+}
+
+/// Return whether `version` satisfies `min <= version <= max` using semver ordering.
+///
+/// Either bound may be `None`, meaning unbounded in that direction.
+pub fn check_version_range(
+    version: &str,
+    min: Option<&str>,
+    max: Option<&str>,
+) -> CompatibilityStatus {
+    let running = match parse_semver(version) {
+        Ok(v) => v,
+        Err(reason) => return CompatibilityStatus::MalformedMetadata { reason },
+    };
+
+    if let Some(min_str) = min {
+        match parse_semver(min_str) {
+            Ok(min_v) => {
+                if running < min_v {
+                    return CompatibilityStatus::TooOld {
+                        required_min: min_str.to_string(),
+                        running: version.to_string(),
+                    };
+                }
+            }
+            Err(reason) => return CompatibilityStatus::MalformedMetadata { reason },
+        }
+    }
+
+    if let Some(max_str) = max {
+        match parse_semver(max_str) {
+            Ok(max_v) => {
+                if running > max_v {
+                    return CompatibilityStatus::TooNew {
+                        required_max: max_str.to_string(),
+                        running: version.to_string(),
+                    };
+                }
+            }
+            Err(reason) => return CompatibilityStatus::MalformedMetadata { reason },
+        }
+    }
+
+    CompatibilityStatus::Compatible
+}
+
+/// Check whether `entry` is compatible with the currently running StarForge CLI.
+///
+/// Templates that carry no version constraints (`cli_version_min` and
+/// `cli_version_max` are both `None`) are always considered compatible, ensuring
+/// full backward compatibility with pre-versioning templates.
+pub fn check_template_compatibility(entry: &TemplateEntry) -> CompatibilityStatus {
+    check_version_range(
+        CLI_VERSION,
+        entry.cli_version_min.as_deref(),
+        entry.cli_version_max.as_deref(),
+    )
+}
+
+/// Validate that `entry` is compatible with the running CLI and return an
+/// actionable error message if it is not.
+pub fn assert_template_compatible(entry: &TemplateEntry) -> Result<()> {
+    match check_template_compatibility(entry) {
+        CompatibilityStatus::Compatible => Ok(()),
+        CompatibilityStatus::TooOld { required_min, running } => {
+            anyhow::bail!(
+                "Template '{}' requires StarForge >= {} but you are running {}.\n\
+                 Please upgrade StarForge: https://github.com/Nanle-code/StarForge#installation",
+                entry.name,
+                required_min,
+                running,
+            )
+        }
+        CompatibilityStatus::TooNew { required_max, running } => {
+            anyhow::bail!(
+                "Template '{}' only supports StarForge <= {} but you are running {}.\n\
+                 Use an older version of StarForge or check if a newer template version is available.",
+                entry.name,
+                required_max,
+                running,
+            )
+        }
+        CompatibilityStatus::MalformedMetadata { reason } => {
+            anyhow::bail!(
+                "Template '{}' has malformed version metadata: {}.\n\
+                 Contact the template author to fix the cli_version_min / cli_version_max fields.",
+                entry.name,
+                reason,
+            )
+        }
     /// Whether the template ships user-facing documentation (e.g. a README).
     #[serde(default)]
     pub documented: bool,
@@ -577,6 +712,16 @@ pub fn update_template(name: &str) -> Result<()> {
 
 /// Fetch a template's files into `dest` according to its source type.
 pub fn fetch_template(entry: &TemplateEntry, dest: &Path) -> Result<()> {
+    // Compatibility gate: reject incompatible templates before touching the filesystem.
+    assert_template_compatible(entry)?;
+
+    let source = &entry.source;
+    if source.starts_with("http://") || source.starts_with("https://") || source.starts_with("git@") {
+        fetch_git_template(source, None, dest)
+    } else if !source.is_empty() {
+        fetch_local_template(Path::new(source), dest)
+    } else {
+        anyhow::bail!("Template '{}' has no source configured", entry.name)
     match &entry.source {
         TemplateSource::Git { url, branch } => fetch_git_template(url, branch.as_deref(), dest),
         TemplateSource::Local { path } => fetch_local_template(Path::new(path), dest),
@@ -678,6 +823,20 @@ pub fn publish_template(
     tags: Vec<String>,
     version: String,
 ) -> Result<()> {
+    publish_template_versioned(template_path, name, description, author, tags, version, None, None)
+}
+
+/// Like `publish_template` but also records optional CLI version constraints.
+pub fn publish_template_versioned(
+    template_path: &Path,
+    name: String,
+    description: String,
+    author: String,
+    tags: Vec<String>,
+    version: String,
+    cli_version_min: Option<String>,
+    cli_version_max: Option<String>,
+) -> Result<()> {
     if !template_path.exists() {
         anyhow::bail!("Template path does not exist: {}", template_path.display());
     }
@@ -706,6 +865,8 @@ pub fn publish_template(
         verified: false,
         created_at: String::new(),
         updated_at: String::new(),
+        cli_version_min,
+        cli_version_max,
         documented: template_path.join("README.md").exists(),
         maintenance: MaintenanceStatus::Active,
     };
@@ -764,6 +925,23 @@ pub fn validate_template_structure(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn make_entry(name: &str) -> TemplateEntry {
+        TemplateEntry {
+            name: name.to_string(),
+            version: "1.0.0".to_string(),
+            description: String::new(),
+            author: String::new(),
+            tags: vec![],
+            source: "https://example.com/repo.git".to_string(),
+            path: None,
+            downloads: 0,
+            verified: false,
+            created_at: String::new(),
+            updated_at: String::new(),
+            cli_version_min: None,
+            cli_version_max: None,
+        }
     use std::fs;
     use tempfile::tempdir;
 
@@ -844,18 +1022,21 @@ mod tests {
             updated_at: "2025-01-01T00:00:00Z".to_string(),
             downloads: 100,
             verified: true,
+            cli_version_min: None,
+            cli_version_max: None,
             documented: true,
             maintenance: MaintenanceStatus::Active,
         });
-        
+
         // Test name search
-        let results: Vec<_> = registry.templates.iter()
-            .filter(|t| t.name.contains("uniswap"))
-            .collect();
+        let results: Vec<_> =
+            registry.templates.iter().filter(|t| t.name.contains("uniswap")).collect();
         assert_eq!(results.len(), 1);
-        
+
         // Test tag search
-        let results: Vec<_> = registry.templates.iter()
+        let results: Vec<_> = registry
+            .templates
+            .iter()
             .filter(|t| t.tags.contains(&"defi".to_string()))
             .collect();
         assert_eq!(results.len(), 1);
@@ -864,11 +1045,11 @@ mod tests {
     #[test]
     fn fetch_template_cached_uses_cache_on_second_call() {
         let tmp = tempfile::tempdir().unwrap();
-        // Simulate a cached directory already present
         let cache_dir = tmp.path().join("my-template");
         std::fs::create_dir_all(&cache_dir).unwrap();
         std::fs::write(cache_dir.join("marker.txt"), "cached").unwrap();
 
+        let entry = make_entry("my-template");
         let entry = TemplateEntry {
             name: "my-template".to_string(),
             source: TemplateSource::Git {
@@ -888,12 +1069,9 @@ mod tests {
             maintenance: MaintenanceStatus::Unknown,
         };
 
-        // When the dest already exists, fetch_template_cached returns it without re-cloning.
-        // We simulate this by calling the inner logic directly using a temporary cache root.
         let dest = tmp.path().join(&entry.name);
         assert!(dest.exists(), "pre-existing cache dir should exist");
 
-        // force_refresh = false: dest is returned as-is
         if dest.exists() {
             let marker = dest.join("marker.txt");
             assert!(marker.exists(), "cached content preserved on force_refresh=false");
@@ -907,7 +1085,6 @@ mod tests {
         std::fs::create_dir_all(&cache_dir).unwrap();
         std::fs::write(cache_dir.join("stale.txt"), "old").unwrap();
 
-        // With force_refresh = true, the old directory should be removed.
         std::fs::remove_dir_all(&cache_dir).unwrap();
         assert!(!cache_dir.exists(), "old cache dir should be gone after force_refresh");
     }
@@ -1021,9 +1198,124 @@ mod tests {
 
     #[test]
     fn template_source_content_returns_none_for_unknown_template() {
-        // An empty registry should return None for any template name.
         let registry = TemplateRegistry::default();
         let found = registry.templates.iter().find(|t| t.name == "nonexistent");
         assert!(found.is_none());
+    }
+
+    // ── Template versioning tests ──────────────────────────────────────────────
+
+    #[test]
+    fn parse_semver_valid() {
+        assert_eq!(parse_semver("1.2.3"), Ok((1, 2, 3)));
+        assert_eq!(parse_semver("0.1.0"), Ok((0, 1, 0)));
+        assert_eq!(parse_semver("10.20.30"), Ok((10, 20, 30)));
+    }
+
+    #[test]
+    fn parse_semver_invalid() {
+        assert!(parse_semver("1.2").is_err());
+        assert!(parse_semver("1.2.x").is_err());
+        assert!(parse_semver("").is_err());
+    }
+
+    #[test]
+    fn check_version_range_no_constraints_is_compatible() {
+        // Templates with no min/max are always compatible.
+        assert_eq!(
+            check_version_range("0.1.0", None, None),
+            CompatibilityStatus::Compatible
+        );
+        assert_eq!(
+            check_version_range("99.0.0", None, None),
+            CompatibilityStatus::Compatible
+        );
+    }
+
+    #[test]
+    fn check_version_range_within_bounds_is_compatible() {
+        assert_eq!(
+            check_version_range("0.1.0", Some("0.1.0"), Some("1.0.0")),
+            CompatibilityStatus::Compatible
+        );
+        assert_eq!(
+            check_version_range("0.5.0", None, None),
+            CompatibilityStatus::Compatible
+        );
+        assert_eq!(
+            check_version_range("0.1.0", Some("0.1.0"), None),
+            CompatibilityStatus::Compatible
+        );
+    }
+
+    #[test]
+    fn check_version_range_below_min_is_too_old() {
+        let result = check_version_range("0.0.9", Some("0.1.0"), None);
+        assert!(matches!(result, CompatibilityStatus::TooOld { .. }));
+    }
+
+    #[test]
+    fn check_version_range_above_max_is_too_new() {
+        let result = check_version_range("2.0.0", None, Some("1.99.99"));
+        assert!(matches!(result, CompatibilityStatus::TooNew { .. }));
+    }
+
+    #[test]
+    fn check_version_range_malformed_min_is_error() {
+        let result = check_version_range("0.1.0", Some("bad"), None);
+        assert!(matches!(result, CompatibilityStatus::MalformedMetadata { .. }));
+    }
+
+    #[test]
+    fn check_version_range_malformed_max_is_error() {
+        let result = check_version_range("0.1.0", None, Some("1.x.0"));
+        assert!(matches!(result, CompatibilityStatus::MalformedMetadata { .. }));
+    }
+
+    #[test]
+    fn template_without_version_metadata_is_compatible() {
+        let entry = make_entry("legacy-template");
+        assert_eq!(check_template_compatibility(&entry), CompatibilityStatus::Compatible);
+    }
+
+    #[test]
+    fn template_compatible_with_current_cli() {
+        let mut entry = make_entry("current-template");
+        entry.cli_version_min = Some(CLI_VERSION.to_string());
+        assert_eq!(check_template_compatibility(&entry), CompatibilityStatus::Compatible);
+    }
+
+    #[test]
+    fn template_requiring_future_cli_is_rejected() {
+        let mut entry = make_entry("future-template");
+        // Parse current version and bump the major to guarantee a future version.
+        let (major, _, _) = parse_semver(CLI_VERSION).unwrap();
+        entry.cli_version_min = Some(format!("{}.0.0", major + 100));
+        let status = check_template_compatibility(&entry);
+        assert!(matches!(status, CompatibilityStatus::TooOld { .. }));
+        assert!(assert_template_compatible(&entry).is_err());
+    }
+
+    #[test]
+    fn template_with_low_max_is_rejected() {
+        let mut entry = make_entry("old-template");
+        // Set max to a version that is guaranteed to be below the current CLI.
+        let (major, minor, _) = parse_semver(CLI_VERSION).unwrap();
+        if major > 0 || minor > 0 {
+            entry.cli_version_max = Some("0.0.0".to_string());
+            let status = check_template_compatibility(&entry);
+            assert!(matches!(status, CompatibilityStatus::TooNew { .. }));
+            assert!(assert_template_compatible(&entry).is_err());
+        }
+        // When CLI_VERSION is "0.0.0" the test is a no-op (trivially passes).
+    }
+
+    #[test]
+    fn template_with_malformed_metadata_is_rejected() {
+        let mut entry = make_entry("bad-template");
+        entry.cli_version_min = Some("not-a-semver".to_string());
+        let status = check_template_compatibility(&entry);
+        assert!(matches!(status, CompatibilityStatus::MalformedMetadata { .. }));
+        assert!(assert_template_compatible(&entry).is_err());
     }
 }
