@@ -81,6 +81,18 @@ pub enum TemplateCommands {
         /// Maximum StarForge CLI version supported (semver, e.g. "1.99.99")
         #[arg(long)]
         cli_version_max: Option<String>,
+        /// SPDX license identifier (e.g. "MIT", "Apache-2.0")
+        #[arg(long)]
+        license: Option<String>,
+        /// Source repository URL
+        #[arg(long)]
+        repository: Option<String>,
+        /// Project homepage URL
+        #[arg(long)]
+        homepage: Option<String>,
+        /// Extended documentation URL
+        #[arg(long)]
+        documentation: Option<String>,
     },
     /// Remove a template from the local marketplace
     Remove {
@@ -121,6 +133,10 @@ pub fn handle(cmd: TemplateCommands) -> Result<()> {
             version,
             cli_version_min,
             cli_version_max,
+            license,
+            repository,
+            homepage,
+            documentation,
         } => publish(
             path,
             name,
@@ -130,6 +146,10 @@ pub fn handle(cmd: TemplateCommands) -> Result<()> {
             version,
             cli_version_min,
             cli_version_max,
+            license,
+            repository,
+            homepage,
+            documentation,
         ),
         TemplateCommands::List => list(),
         TemplateCommands::Search {
@@ -179,6 +199,10 @@ fn publish(
     version: String,
     cli_version_min: Option<String>,
     cli_version_max: Option<String>,
+    license: Option<String>,
+    repository: Option<String>,
+    homepage: Option<String>,
+    documentation: Option<String>,
 ) -> Result<()> {
     use dialoguer::{theme::ColorfulTheme, Input};
     let name = match name {
@@ -215,6 +239,10 @@ fn publish(
         version,
         cli_version_min,
         cli_version_max,
+        license,
+        repository,
+        homepage,
+        documentation,
     )?;
     let template = templates::get_template(&name)?;
 
@@ -225,6 +253,12 @@ fn publish(
     p::kv("Source", &template.source.to_string());
     if !template.tags.is_empty() {
         p::kv("Tags", &template.tags.join(", "));
+    }
+    if let Some(lic) = template.license.as_ref() {
+        p::kv("License", lic);
+    }
+    if let Some(repo) = template.repository.as_ref() {
+        p::kv("Repository", repo);
     }
     if let Some(path) = template.path.as_ref() {
         p::kv("Path", path);
@@ -406,6 +440,18 @@ fn show(name: String) -> Result<()> {
     }
     if !template.tags.is_empty() {
         p::kv("Tags", &template.tags.join(", "));
+    }
+    if let Some(ref license) = template.license {
+        p::kv("License", license);
+    }
+    if let Some(ref repo) = template.repository {
+        p::kv("Repository", repo);
+    }
+    if let Some(ref hp) = template.homepage {
+        p::kv("Homepage", hp);
+    }
+    if let Some(ref doc_url) = template.documentation {
+        p::kv("Documentation", doc_url);
     }
     if let Some(ref min) = template.cli_version_min {
         p::kv("Requires StarForge >=", min);
