@@ -38,6 +38,11 @@ pub struct DeployArgs {
     /// Simulate deploy transaction via Soroban RPC before confirmation
     #[arg(long, default_value = "false")]
     pub simulate: bool,
+    /// Dry-run: validate artifact paths, network connectivity, wallet existence,
+    /// and estimate fees without submitting any transaction. Prints a full
+    /// deployment plan and exits. Implies --simulate.
+    #[arg(long, default_value = "false")]
+    pub dry_run: bool,
 }
 
 fn is_wasm_above_size_limit(wasm_size_kb: f64) -> bool {
@@ -74,6 +79,148 @@ fn build_stellar_deploy_args(wasm: &std::path::Path, source: &str, network: &str
         "--network".to_string(),
         network.to_string(),
     ]
+}
+
+/// Validate and summarise a deployment plan without submitting any transaction.
+///
+/// Checks: WASM artifact path, network connectivity via Horizon, wallet
+/// existence on-chain, and estimated Soroban fees via RPC simulation. Exits
+/// cleanly after printing the plan so the caller can review before going live.
+fn run_dry_run(
+    wasm_path: &std::path::Path,
+    wasm_bytes: &[u8],
+    wasm_hash: &str,
+    wasm_size_kb: f64,
+    wallet: &crate::utils::config::WalletEntry,
+    network: &str,
+) -> Result<()> {
+    p::header("Deployment Dry-Run Plan");
+
+    let mut warnings: Vec<String> = Vec::new();
+    let mut checks_passed = 0u32;
+    let checks_total = 4u32;
+
+    // ── Check 1: artifact path ────────────────────────────────────────────
+    p::kv("[ 1/4 ] WASM artifact", &wasm_path.display().to_string());
+    p::kv("        Size", &format!("{:.1} KB", wasm_size_kb));
+    p::kv("        SHA-256", wasm_hash);
+    if is_wasm_above_size_limit(wasm_size_kb) {
+        warnings.push(format!(
+            "WASM is {:.1} KB — Soroban limit is 128 KB. Run `starforge gas optimize` first.",
+            wasm_size_kb
+        ));
+    }
+    // Verify the bytes are non-empty and start with the WASM magic header.
+    if wasm_bytes.len() < 4 || &wasm_bytes[..4] != b"\0asm" {
+        warnings.push("File does not appear to be a valid WASM binary (missing magic header).".to_string());
+    } else {
+        checks_passed += 1;
+        p::success("        Artifact is a valid WASM binary");
+    }
+    println!();
+
+    // ── Check 2: wallet existence ─────────────────────────────────────────
+    p::kv("[ 2/4 ] Wallet", &wallet.name);
+    p::kv("        Public key", &wallet.public_key);
+    checks_passed += 1;
+    p::success("        Wallet found in local config");
+    println!();
+
+    // ── Check 3: network connectivity / account balance ───────────────────
+    p::kv("[ 3/4 ] Network", network);
+    match horizon::fetch_account(&wallet.public_key, network) {
+        Ok(account) => {
+            let xlm = account
+                .balances
+                .iter()
+                .find(|b| b.asset_type == "native")
+                .map(|b| b.balance.as_str())
+                .unwrap_or("0");
+            p::kv("        XLM balance", &format!("{} XLM", xlm));
+            let balance: f64 = xlm.parse().unwrap_or(0.0);
+            if balance < 1.0 {
+                warnings.push(format!(
+                    "Account balance ({} XLM) may be too low to cover deployment fees. Fund with: starforge wallet fund {}",
+                    xlm, wallet.name
+                ));
+            }
+            checks_passed += 1;
+            p::success("        Account is active on-chain");
+        }
+        Err(e) => {
+            warnings.push(format!(
+                "Cannot reach {} network or account not funded: {}. Fund with: starforge wallet fund {}",
+                network, e, wallet.name
+            ));
+            p::warn(&format!("        Network/account check failed: {}", e));
+        }
+    }
+    println!();
+
+    // ── Check 4: fee estimation via Soroban RPC simulation ────────────────
+    p::info("[ 4/4 ] Estimating Soroban fees via RPC simulation...");
+    match soroban::simulate_deploy_transaction(wasm_hash, network, wallet) {
+        Ok(simulation) => {
+            p::kv("        Estimated fee", &format!("{} stroops", simulation.fee));
+            if !simulation.errors.is_empty() {
+                for error in &simulation.errors {
+                    warnings.push(format!("RPC simulation warning: {}", error));
+                }
+            } else {
+                checks_passed += 1;
+                p::success("        Fee simulation succeeded");
+            }
+        }
+        Err(e) => {
+            warnings.push(format!(
+                "Fee simulation unavailable (Soroban RPC unreachable): {}. Deployment may still succeed.",
+                e
+            ));
+            p::warn(&format!("        Fee simulation failed: {}", e));
+            // Partial credit — simulation failure alone should not block the plan.
+            checks_passed += 1;
+        }
+    }
+    println!();
+
+    // ── Summary ───────────────────────────────────────────────────────────
+    p::separator();
+    p::header("Deployment Plan Summary");
+    p::kv("Checks passed", &format!("{}/{}", checks_passed, checks_total));
+    p::kv("Network", network);
+    p::kv("Wallet", &wallet.name);
+    p::kv("WASM", &wasm_path.display().to_string());
+    p::kv("WASM hash (SHA-256)", wasm_hash);
+
+    println!();
+    let deploy_cmd = build_stellar_deploy_command(wasm_path, &wallet.public_key, network);
+    println!("  Stellar CLI command to deploy:");
+    for line in deploy_cmd.lines() {
+        println!("    {}", line);
+    }
+
+    if !warnings.is_empty() {
+        println!();
+        p::warn(&format!("{} warning(s):", warnings.len()));
+        for w in &warnings {
+            p::warn(&format!("  • {}", w));
+        }
+    }
+
+    if network == "mainnet" {
+        println!();
+        p::warn("Target network is MAINNET. This will cost real XLM when executed.");
+    }
+
+    println!();
+    if warnings.is_empty() {
+        p::success("Dry-run complete — no issues found. Run with --execute to deploy.");
+    } else {
+        p::info("Dry-run complete with warnings. Review above before deploying.");
+        p::info("Run with --execute to deploy, or address the warnings first.");
+    }
+
+    Ok(())
 }
 
 pub fn handle(args: DeployArgs) -> Result<()> {
@@ -162,6 +309,11 @@ pub fn handle(args: DeployArgs) -> Result<()> {
     p::separator();
 
     let wasm_hash = compute_local_wasm_hash(&wasm_bytes);
+
+    // --dry-run: validate everything and print deployment plan, then exit.
+    if args.dry_run {
+        return run_dry_run(&wasm_path, &wasm_bytes, &wasm_hash, wasm_size_kb, wallet, &args.network);
+    }
 
     if args.simulate {
         p::info("Simulating deploy transaction via Soroban RPC...");
