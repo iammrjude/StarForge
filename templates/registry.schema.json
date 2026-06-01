@@ -1,0 +1,34 @@
+{
+  "type": "object",
+  "required": [
+    "name",
+    "version",
+    "description",
+    "author",
+    "tags",
+    "source"
+  ],
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "version": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "author": {
+      "type": "string"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "source": {
+      "type": "object"
+    }
+  }
+}
