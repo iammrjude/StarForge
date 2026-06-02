@@ -98,6 +98,14 @@ impl PluginManager {
             .collect()
     }
 
+    /// Returns all `PluginCommand`s advertised by every loaded plugin.
+    pub fn list_commands(&self) -> Vec<crate::plugins::interface::PluginCommand> {
+        self.plugins
+            .values()
+            .flat_map(|(p, _)| p.commands())
+            .collect()
+    }
+
     pub fn execute(&self, name: &str, args: &[String]) -> Result<(), String> {
         if let Some((plugin, _)) = self.plugins.get(name) {
             plugin.execute(args)

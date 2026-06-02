@@ -212,6 +212,19 @@ fn handle_external_plugin(args: Vec<String>) -> anyhow::Result<()> {
         );
     }
 
+    // Check if the command matches any registered plugin command before loading .so files.
+    let all_commands = plugins::registry::load_all_registered_commands();
+    let known = all_commands.iter().any(|c| c.name == *plugin_name);
+    if !known {
+        let available: Vec<String> = all_commands.iter().map(|c| format!("  • {}", c.name)).collect();
+        let hint = if available.is_empty() {
+            "No plugin commands registered. Re-install plugins to discover their commands.".to_string()
+        } else {
+            format!("Available plugin commands:\n{}", available.join("\n"))
+        };
+        anyhow::bail!("Unknown command '{}'.\n\n{}", plugin_name, hint);
+    }
+
     // Warn about unknown-trust plugins before loading.
     for pl in reg
         .plugins

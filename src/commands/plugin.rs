@@ -1,10 +1,9 @@
 use crate::plugins::interface::CORE_VERSION;
 use crate::plugins::manifest;
-use crate::plugins::registry::{self, TrustLevel, UninstallOptions};
+use crate::plugins::registry::{self, RegisteredCommand, TrustLevel, UninstallOptions};
 use crate::plugins::PluginManager;
 use crate::utils::print as p;
 use anyhow::{Context, Result};
-use chrono;
 use clap::Subcommand;
 use std::path::PathBuf;
 
@@ -63,6 +62,11 @@ pub enum PluginCommands {
         #[arg(long, default_value = "false")]
         yes: bool,
     },
+    /// List commands registered by installed plugins
+    Commands {
+        /// Show commands for a specific plugin only
+        name: Option<String>,
+    },
 }
 
 pub fn handle(cmd: PluginCommands) -> Result<()> {
@@ -78,6 +82,7 @@ pub fn handle(cmd: PluginCommands) -> Result<()> {
         PluginCommands::Uninstall { name, purge, yes } => uninstall(name, purge, yes),
         PluginCommands::Verify { name } => verify(name),
         PluginCommands::Update { name, yes } => update(name, yes),
+        PluginCommands::Commands { name } => commands(name),
     }
 }
 
@@ -105,12 +110,29 @@ fn install(name: String, path: Option<PathBuf>, source: Option<String>, force: b
 
     let plugin_manifest = manifest::require_compatible_manifest(&lib_path, &name)?;
 
+    // Load the plugin to discover the commands it registers.
+    let discovered_commands: Vec<RegisteredCommand> = {
+        let mut pm = PluginManager::new();
+        unsafe {
+            pm.load_plugin(&lib_path)
+                .with_context(|| format!("Failed to load plugin '{}' to discover commands", name))?;
+        }
+        pm.list_commands()
+            .into_iter()
+            .map(|c| RegisteredCommand {
+                name: c.name,
+                description: c.description,
+            })
+            .collect()
+    };
+
     registry::install_plugin(
         &name,
         &lib_path,
         source_str,
         &plugin_manifest.starforge_version,
         &plugin_manifest.version,
+        discovered_commands.clone(),
     )?;
 
     p::header("Plugin Install");
@@ -122,6 +144,12 @@ fn install(name: String, path: Option<PathBuf>, source: Option<String>, force: b
     p::kv("Trust", trust.label());
     if !source_str.is_empty() {
         p::kv("Source", source_str);
+    }
+    if !discovered_commands.is_empty() {
+        p::info("Registered commands:");
+        for cmd in &discovered_commands {
+            p::info(&format!("  • {}  — {}", cmd.name, cmd.description));
+        }
     }
     p::info("Load plugins with: starforge plugin load");
     Ok(())
@@ -316,9 +344,6 @@ fn update(name: Option<String>, yes: bool) -> Result<()> {
                 pl.name
             ));
             p::kv("  Path", &pl.path);
-            if let Some(ref ts) = pl.installed_at {
-                p::kv("  Installed at", ts);
-            }
             skipped += 1;
             println!();
             continue;
@@ -356,7 +381,10 @@ fn update(name: Option<String>, yes: bool) -> Result<()> {
 
             match status {
                 Ok(s) if s.success() => {
-                    registry::install_plugin(&pl.name, std::path::Path::new(&pl.path), &pl.source)?;
+                    // Re-discover commands from the updated library.
+                    let cmds = discover_commands_from_library(&pl.path)
+                        .unwrap_or_else(|_| pl.commands.clone());
+                    registry::install_plugin(&pl.name, std::path::Path::new(&pl.path), &pl.source, &pl.starforge_version, &pl.plugin_version, cmds)?;
                     p::success(&format!("  '{}' updated via cargo install", pl.name));
                     updated += 1;
                 }
@@ -388,19 +416,19 @@ fn update(name: Option<String>, yes: bool) -> Result<()> {
                         })
                         .unwrap_or(0);
 
-                    let installed_epoch = pl
-                        .installed_at
-                        .as_deref()
-                        .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
-                        .map(|dt| dt.timestamp() as u64)
-                        .unwrap_or(0);
+                    let installed_epoch = 0u64; // no install timestamp stored; treat as always-stale
 
                     if modified > installed_epoch {
                         // Library on disk is newer — refresh the registry entry.
+                        let cmds = discover_commands_from_library(&pl.path)
+                            .unwrap_or_else(|_| pl.commands.clone());
                         registry::install_plugin(
                             &pl.name,
                             std::path::Path::new(&pl.path),
                             &pl.source,
+                            &pl.starforge_version,
+                            &pl.plugin_version,
+                            cmds,
                         )?;
                         p::success(&format!(
                             "  '{}' library on disk is newer — registry refreshed.",
@@ -514,6 +542,63 @@ fn verify(name: Option<String>) -> Result<()> {
 
     if all_ok {
         p::success("All checked plugins passed verification.");
+    }
+
+    Ok(())
+}
+
+fn discover_commands_from_library(path: &str) -> Result<Vec<RegisteredCommand>> {
+    let mut pm = PluginManager::new();
+    unsafe {
+        pm.load_plugin(path)
+            .with_context(|| format!("Failed to load plugin from {}", path))?;
+    }
+    Ok(pm
+        .list_commands()
+        .into_iter()
+        .map(|c| RegisteredCommand {
+            name: c.name,
+            description: c.description,
+        })
+        .collect())
+}
+
+fn commands(name: Option<String>) -> Result<()> {
+    p::header("Plugin Commands");
+
+    let reg = registry::load_registry().unwrap_or_default();
+    if reg.plugins.is_empty() {
+        p::info("No plugins installed. Use: starforge plugin install <name> --path <lib>");
+        return Ok(());
+    }
+
+    let plugins: Vec<_> = match &name {
+        Some(n) => {
+            let found: Vec<_> = reg.plugins.iter().filter(|p| &p.name == n).collect();
+            if found.is_empty() {
+                anyhow::bail!("Plugin '{}' is not installed. Run `starforge plugin list`.", n);
+            }
+            found
+        }
+        None => reg.plugins.iter().collect(),
+    };
+
+    let mut any = false;
+    for pl in &plugins {
+        if pl.commands.is_empty() {
+            continue;
+        }
+        any = true;
+        p::kv_accent("Plugin", &pl.name);
+        for cmd in &pl.commands {
+            println!("  starforge {}  — {}", cmd.name, cmd.description);
+        }
+        println!();
+    }
+
+    if !any {
+        p::info("No commands registered. Re-install plugins to discover their commands.");
+        p::info("  starforge plugin install <name> --path <lib>");
     }
 
     Ok(())
