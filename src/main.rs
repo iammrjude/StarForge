@@ -110,13 +110,8 @@ enum Commands {
     /// Static analysis and linting for Soroban contracts
     Lint(commands::lint::LintArgs),
 
-    /// Manage configuration settings
-    #[command(subcommand)]
-    Config(commands::config::ConfigCommands),
-
-    /// Manage telemetry settings
-    #[command(subcommand)]
-    Telemetry(commands::telemetry::TelemetryCommands),
+    /// Run connectivity diagnostics for attached Ledger/Trezor devices
+    Diagnostics(commands::diagnostics::DiagnosticsArgs),
 
     /// Execute an installed plugin command (e.g. `starforge defi ...`)
     #[command(external_subcommand)]
@@ -159,8 +154,7 @@ fn main() {
         Commands::Template(_) => "template",
         Commands::Upgrade(_) => "upgrade",
         Commands::Lint(_) => "lint",
-        Commands::Config(_) => "config",
-        Commands::Telemetry(_) => "telemetry",
+        Commands::Diagnostics(_) => "diagnostics",
         Commands::External(_) => "external",
     }
     .to_string();
@@ -188,8 +182,7 @@ fn main() {
         Commands::Template(args) => commands::template::handle(args),
         Commands::Upgrade(cmd) => commands::upgrade::handle(cmd),
         Commands::Lint(args) => commands::lint::handle(args),
-        Commands::Config(cmd) => commands::config::handle(cmd),
-        Commands::Telemetry(cmd) => commands::telemetry::handle(cmd),
+        Commands::Diagnostics(args) => commands::diagnostics::handle(args),
         Commands::External(args) => handle_external_plugin(args),
     };
     let duration = start.elapsed();
