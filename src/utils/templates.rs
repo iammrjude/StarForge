@@ -1909,10 +1909,10 @@ mod tests {
         entry.downloads = 1500;
 
         let badges = entry.trust_indicators();
-        assert!(badges.iter().any(|b| b.contains("Verified")));
-        assert!(badges.iter().any(|b| b.contains("Documented")));
-        assert!(badges.iter().any(|b| b.contains("Deprecated")));
-        assert!(badges.iter().any(|b| b.contains("Popular")));
+        assert!(badges.iter().any(|b| b.contains("VERIFIED")));
+        assert!(badges.iter().any(|b| b.contains("DOCS")));
+        assert!(badges.iter().any(|b| b.contains("DEPRECATED")));
+        assert!(badges.iter().any(|b| b.contains("POPULAR")));
     }
 
     #[test]

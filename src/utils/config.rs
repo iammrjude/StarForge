@@ -112,10 +112,10 @@ pub fn validate_secret_key(secret: &str) -> Result<()> {
         }
 
         // Validate base64 parts (first 3 parts are always base64)
-        for i in 0..3 {
-            BASE64.decode(parts[i]).map_err(|_| {
-                anyhow::anyhow!("Invalid base64 in encrypted secret bundle at part {}", i)
-            })?;
+        for part in parts.iter().take(3) {
+            BASE64
+                .decode(part)
+                .map_err(|_| anyhow::anyhow!("Invalid base64 in encrypted secret bundle"))?;
         }
 
         // If 5 or 6-part bundle, validate KDF parameters are valid u32
@@ -700,8 +700,10 @@ mod tests {
 
     #[test]
     fn validate_config_rejects_missing_active_network() {
-        let mut cfg = Config::default();
-        cfg.network = "unknown-net".to_string();
+        let cfg = Config {
+            network: "unknown-net".to_string(),
+            ..Default::default()
+        };
         let err = validate_config(&cfg).unwrap_err();
         assert!(err.to_string().contains("unknown-net"));
     }
