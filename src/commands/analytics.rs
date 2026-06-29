@@ -370,7 +370,7 @@ fn events_to_csv(events: &[DeploymentEvent]) -> String {
 
 // ── Command handlers ──────────────────────────────────────────────────────────
 
-pub fn handle(cmd: AnalyticsCommands) -> Result<()> {
+pub async fn handle(cmd: AnalyticsCommands) -> Result<()> {
     match cmd {
         AnalyticsCommands::Track(args) => handle_track(args),
         AnalyticsCommands::Metrics(args) => handle_metrics(args),

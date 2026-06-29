@@ -56,7 +56,7 @@ pub struct MonitorArgs {
     pub interval: u64,
 }
 
-pub fn handle(args: MonitorArgs) -> Result<()> {
+pub async fn handle(args: MonitorArgs) -> Result<()> {
     let cfg = config::load()?;
     let network = args.network.as_deref().unwrap_or(&cfg.network);
     config::validate_network(network)?;
@@ -77,19 +77,19 @@ pub fn handle(args: MonitorArgs) -> Result<()> {
             network,
             args.interval,
             args.follow,
-        ),
+        ).await,
         (None, Some(wallet_name)) => monitor_wallet(
             wallet_name,
             args.threshold,
             args.balance_alert,
             network,
             args.interval,
-        ),
+        ).await,
         _ => anyhow::bail!("Specify either --contract or --wallet (but not both)"),
     }
 }
 
-fn monitor_contract(
+async fn monitor_contract(
     contract_id: &str,
     events_filter: Option<&str>,
     event_type: Option<&str>,
@@ -196,7 +196,7 @@ fn monitor_contract(
     Ok(())
 }
 
-fn monitor_wallet(
+async fn monitor_wallet(
     wallet_name: &str,
     threshold: Option<f64>,
     balance_alert: Option<f64>,
@@ -244,7 +244,7 @@ fn monitor_wallet(
     }
 
     while running.load(Ordering::SeqCst) {
-        let account = horizon::fetch_account(&wallet.public_key, network)?;
+        let account = horizon::fetch_account(&wallet.public_key, network).await?;
         let native = account
             .balances
             .iter()

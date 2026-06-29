@@ -231,7 +231,7 @@ const COMMANDS: &[CmdEntry] = &[
     },
 ];
 
-pub fn handle() -> Result<()> {
+pub async fn handle() -> Result<()> {
     p::header("StarForge Command Tree");
     println!();
 

@@ -86,7 +86,7 @@ fn build_stellar_deploy_args(wasm: &std::path::Path, source: &str, network: &str
 /// Checks: WASM artifact path, network connectivity via Horizon, wallet
 /// existence on-chain, and estimated Soroban fees via RPC simulation. Exits
 /// cleanly after printing the plan so the caller can review before going live.
-fn run_dry_run(
+async fn run_dry_run(
     wasm_path: &std::path::Path,
     wasm_bytes: &[u8],
     wasm_hash: &str,
@@ -130,7 +130,7 @@ fn run_dry_run(
 
     // ── Check 3: network connectivity / account balance ───────────────────
     p::kv("[ 3/4 ] Network", network);
-    match horizon::fetch_account(&wallet.public_key, network) {
+    match horizon::fetch_account(&wallet.public_key, network).await {
         Ok(account) => {
             let xlm = account
                 .balances
@@ -161,7 +161,7 @@ fn run_dry_run(
 
     // ── Check 4: fee estimation via Soroban RPC simulation ────────────────
     p::info("[ 4/4 ] Estimating Soroban fees via RPC simulation...");
-    match soroban::simulate_deploy_transaction(wasm_hash, network, wallet) {
+    match soroban::simulate_deploy_transaction(wasm_hash, network, wallet).await {
         Ok(simulation) => {
             p::kv(
                 "        Estimated fee",
@@ -231,7 +231,7 @@ fn run_dry_run(
     Ok(())
 }
 
-pub fn handle(args: DeployArgs) -> Result<()> {
+pub async fn handle(args: DeployArgs) -> Result<()> {
     p::header("Deploy Soroban Contract");
 
     if !args.wasm.exists() {
@@ -327,12 +327,12 @@ pub fn handle(args: DeployArgs) -> Result<()> {
             wasm_size_kb,
             wallet,
             &args.network,
-        );
+        ).await;
     }
 
     if args.simulate {
         p::info("Simulating deploy transaction via Soroban RPC...");
-        match soroban::simulate_deploy_transaction(&wasm_hash, &args.network, wallet) {
+        match soroban::simulate_deploy_transaction(&wasm_hash, &args.network, wallet).await {
             Ok(simulation) => {
                 p::kv("Estimated Fee", &format!("{} stroops", simulation.fee));
                 if !simulation.errors.is_empty() {
@@ -388,7 +388,7 @@ pub fn handle(args: DeployArgs) -> Result<()> {
     let pb = p::progress_bar(3, "Starting deployment steps...");
 
     pb.set_message("Verifying account on-chain...");
-    let account = horizon::fetch_account(&wallet.public_key, &args.network).map_err(|e| {
+    let account = horizon::fetch_account(&wallet.public_key, &args.network).await.map_err(|e| {
         pb.abandon();
         anyhow::anyhow!(
             "Account not active on {}: {}\nFund it with: starforge wallet fund {}",

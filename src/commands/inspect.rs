@@ -64,17 +64,17 @@ pub struct StorageArgs {
 
 // ── Entry point ───────────────────────────────────────────────────────────────
 
-pub fn handle(cmd: InspectCommands) -> Result<()> {
+pub async fn handle(cmd: InspectCommands) -> Result<()> {
     match cmd {
-        InspectCommands::State(args) => handle_state(args),
-        InspectCommands::Key(args) => handle_key(args),
-        InspectCommands::Storage(args) => handle_storage(args),
+        InspectCommands::State(args) => handle_state(args).await,
+        InspectCommands::Key(args) => handle_key(args).await,
+        InspectCommands::Storage(args) => handle_storage(args).await,
     }
 }
 
 // ── Handlers ──────────────────────────────────────────────────────────────────
 
-fn handle_state(args: StateArgs) -> Result<()> {
+async fn handle_state(args: StateArgs) -> Result<()> {
     config::validate_contract_id(&args.contract_id)?;
     config::validate_network(&args.network)?;
 
@@ -86,7 +86,7 @@ fn handle_state(args: StateArgs) -> Result<()> {
 
     println!();
     p::step(1, 1, "Querying contract instance from Soroban RPC…");
-    let result = soroban::inspect_contract(&args.contract_id, &args.network)?;
+    let result = soroban::inspect_contract(&args.contract_id, &args.network).await?;
     println!();
 
     if args.json {
@@ -132,7 +132,7 @@ fn handle_state(args: StateArgs) -> Result<()> {
     Ok(())
 }
 
-fn handle_key(args: KeyArgs) -> Result<()> {
+async fn handle_key(args: KeyArgs) -> Result<()> {
     config::validate_contract_id(&args.contract_id)?;
     config::validate_network(&args.network)?;
 
@@ -146,7 +146,7 @@ fn handle_key(args: KeyArgs) -> Result<()> {
 
     println!();
     p::step(1, 1, "Querying contract storage…");
-    let result = soroban::inspect_contract(&args.contract_id, &args.network)?;
+    let result = soroban::inspect_contract(&args.contract_id, &args.network).await?;
     println!();
 
     // Search instance storage for the key (case-insensitive symbol match)
@@ -177,7 +177,7 @@ fn handle_key(args: KeyArgs) -> Result<()> {
     Ok(())
 }
 
-fn handle_storage(args: StorageArgs) -> Result<()> {
+async fn handle_storage(args: StorageArgs) -> Result<()> {
     config::validate_contract_id(&args.contract_id)?;
     config::validate_network(&args.network)?;
 
@@ -190,7 +190,7 @@ fn handle_storage(args: StorageArgs) -> Result<()> {
 
     println!();
     p::step(1, 1, "Querying contract storage from Soroban RPC…");
-    let result = soroban::inspect_contract(&args.contract_id, &args.network)?;
+    let result = soroban::inspect_contract(&args.contract_id, &args.network).await?;
     println!();
 
     if args.json {

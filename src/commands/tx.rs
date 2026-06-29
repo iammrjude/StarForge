@@ -93,16 +93,16 @@ pub struct HistoryArgs {
     pub details: bool,
 }
 
-pub fn handle(args: TxArgs) -> Result<()> {
+pub async fn handle(args: TxArgs) -> Result<()> {
     match args.command {
-        TxCommands::Fees { network } => handle_fees(network),
-        TxCommands::Send(args) => handle_send(args),
-        TxCommands::Batch(args) => handle_batch(args),
-        TxCommands::History(args) => handle_history(args),
+        TxCommands::Fees { network } => handle_fees(network).await,
+        TxCommands::Send(args) => handle_send(args).await,
+        TxCommands::Batch(args) => handle_batch(args).await,
+        TxCommands::History(args) => handle_history(args).await,
     }
 }
 
-fn handle_batch(args: BatchArgs) -> Result<()> {
+async fn handle_batch(args: BatchArgs) -> Result<()> {
     p::header("Batch Stellar Transaction");
 
     config::validate_wallet_name(&args.from)?;
@@ -161,7 +161,7 @@ fn handle_batch(args: BatchArgs) -> Result<()> {
     println!();
     p::step(1, 2, "Fetching source account info…");
     let source_account =
-        horizon::fetch_account(&wallet.public_key, &args.network).map_err(|e| {
+        horizon::fetch_account(&wallet.public_key, &args.network).await.map_err(|e| {
             anyhow::anyhow!(
                 "Source account not found on {}: {}\nFund it with: starforge wallet fund {}",
                 args.network,
@@ -253,7 +253,7 @@ fn handle_batch(args: BatchArgs) -> Result<()> {
         &tx_result.transaction_xdr,
         &secret_key,
         &args.network,
-    )?;
+    ).await?;
 
     println!();
     p::separator();
@@ -294,7 +294,7 @@ fn batch_operation_to_payment(op: &tx_batch::BatchOperation) -> Result<horizon::
     }
 }
 
-fn handle_send(args: SendArgs) -> Result<()> {
+async fn handle_send(args: SendArgs) -> Result<()> {
     p::header("Send Stellar Payment");
 
     config::validate_wallet_name(&args.from)?;
@@ -343,7 +343,7 @@ fn handle_send(args: SendArgs) -> Result<()> {
     println!();
     p::step(1, 3, "Fetching source account info…");
     let source_account =
-        horizon::fetch_account(&wallet.public_key, &args.network).map_err(|e| {
+        horizon::fetch_account(&wallet.public_key, &args.network).await.map_err(|e| {
             anyhow::anyhow!(
                 "Source account not found on {}: {}\nFund it with: starforge wallet fund {}",
                 args.network,
@@ -375,7 +375,7 @@ fn handle_send(args: SendArgs) -> Result<()> {
 
     // Step 2: Validate destination account
     p::step(2, 3, "Validating destination account…");
-    match horizon::fetch_account(&args.to, &args.network) {
+    match horizon::fetch_account(&args.to, &args.network).await {
         Ok(_) => p::kv("Destination", "✓ Account exists"),
         Err(_) => {
             if asset_code.is_none() {
@@ -467,7 +467,7 @@ fn handle_send(args: SendArgs) -> Result<()> {
         &tx_result.transaction_xdr,
         &secret_key,
         &args.network,
-    )?;
+    ).await?;
 
     println!();
     p::separator();
@@ -508,7 +508,7 @@ fn parse_asset(asset: &str) -> Result<(Option<String>, Option<String>)> {
     }
 }
 
-fn handle_history(args: HistoryArgs) -> Result<()> {
+async fn handle_history(args: HistoryArgs) -> Result<()> {
     let limit = args.limit.min(200);
 
     config::validate_public_key(&args.public_key)?;
@@ -569,7 +569,7 @@ fn handle_history(args: HistoryArgs) -> Result<()> {
         },
     };
 
-    match horizon::fetch_transactions_filtered(&args.public_key, &network, filter) {
+    match horizon::fetch_transactions_filtered(&args.public_key, &network, filter).await {
         Err(e) => {
             println!("\n  {} {}\n", "✗".red().bold(), e.to_string().red());
         }
@@ -587,14 +587,14 @@ fn handle_history(args: HistoryArgs) -> Result<()> {
     Ok(())
 }
 
-fn handle_fees(network_opt: Option<String>) -> Result<()> {
+async fn handle_fees(network_opt: Option<String>) -> Result<()> {
     // Determine the network, default to config or testnet
     let network = match network_opt {
         Some(net) => net,
         None => config::load()?.network,
     };
     config::validate_network(&network)?;
-    let stats: FeeStats = horizon::fetch_fee_stats(&network)?;
+    let stats: FeeStats = horizon::fetch_fee_stats(&network).await?;
     p::header("Recommended Fee Levels");
     p::kv("Network", &network);
     p::kv("Low Fee (stroops)", &stats.low_fee);

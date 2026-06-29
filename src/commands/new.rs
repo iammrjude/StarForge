@@ -40,7 +40,7 @@ pub enum NewCommands {
     },
 }
 
-pub fn handle(cmd: NewCommands) -> Result<()> {
+pub async fn handle(cmd: NewCommands) -> Result<()> {
     match cmd {
         NewCommands::Contract {
             name,

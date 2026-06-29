@@ -85,7 +85,7 @@ pub enum PluginCommands {
     },
 }
 
-pub fn handle(cmd: PluginCommands) -> Result<()> {
+pub async fn handle(cmd: PluginCommands) -> Result<()> {
     match cmd {
         PluginCommands::Install {
             name,

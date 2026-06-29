@@ -74,7 +74,7 @@ pub enum MultisigCommands {
     },
 }
 
-pub fn handle(cmd: MultisigCommands) -> Result<()> {
+pub async fn handle(cmd: MultisigCommands) -> Result<()> {
     match cmd {
         MultisigCommands::Create {
             threshold,

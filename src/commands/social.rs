@@ -279,7 +279,7 @@ pub struct LeaderboardArgs {
     pub limit: usize,
 }
 
-pub fn handle(cmd: SocialCommands) -> Result<()> {
+pub async fn handle(cmd: SocialCommands) -> Result<()> {
     match cmd {
         SocialCommands::Team(team_cmd) => handle_team(team_cmd),
         SocialCommands::Review(review_cmd) => handle_review(review_cmd),

@@ -31,7 +31,7 @@ pub enum GasCommands {
     },
 }
 
-pub fn handle(cmd: GasCommands) -> Result<()> {
+pub async fn handle(cmd: GasCommands) -> Result<()> {
     match cmd {
         GasCommands::Analyze { wasm, network } => analyze(wasm, network),
         GasCommands::Optimize { target, output } => optimize(target, output),

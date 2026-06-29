@@ -317,7 +317,7 @@ pub enum MultisigCommands {
     },
 }
 
-pub fn handle(cmd: WalletCommands) -> Result<()> {
+pub async fn handle(cmd: WalletCommands) -> Result<()> {
     match cmd {
         WalletCommands::Create {
             name,
@@ -343,10 +343,10 @@ pub fn handle(cmd: WalletCommands) -> Result<()> {
             mem,
             iterations,
             parallelism,
-        ),
+        ).await,
         WalletCommands::List => list(),
-        WalletCommands::Show { name, reveal } => show(name, reveal),
-        WalletCommands::Fund { name } => fund_wallet(name),
+        WalletCommands::Show { name, reveal } => show(name, reveal).await,
+        WalletCommands::Fund { name } => fund_wallet(name).await,
         WalletCommands::Remove { name } => remove(name),
         WalletCommands::Rename { old_name, new_name } => rename(old_name, new_name),
         WalletCommands::Merge {
@@ -355,7 +355,7 @@ pub fn handle(cmd: WalletCommands) -> Result<()> {
             network,
             yes,
             remove_local,
-        } => merge_wallet(from, to, network, yes, remove_local),
+        } => merge_wallet(from, to, network, yes, remove_local).await,
         WalletCommands::Rotate {
             name,
             fund,
@@ -376,7 +376,7 @@ pub fn handle(cmd: WalletCommands) -> Result<()> {
             iterations,
             parallelism,
             backup,
-        ),
+        ).await,
         WalletCommands::Export {
             name,
             all,
@@ -411,7 +411,7 @@ pub fn handle(cmd: WalletCommands) -> Result<()> {
             hardware,
         } => sign_message(name, message, hardware),
         WalletCommands::Derive => derive_addresses(),
-        WalletCommands::Multisig(cmd) => handle_multisig(cmd),
+        WalletCommands::Multisig(cmd) => handle_multisig(cmd).await,
     }
 }
 
@@ -545,7 +545,7 @@ fn prompt_recovery_phrase() -> Result<String> {
     Ok(phrase)
 }
 
-fn create(
+async fn create(
     name: String,
     fund: bool,
     network_override: Option<String>,
@@ -648,7 +648,7 @@ fn create(
             p::warn("Friendbot is not available on Mainnet. Skipping fund step.");
         } else {
             p::step(3, steps, "Funding via network faucet…");
-            match horizon::fund_account(&public_key, &network) {
+            match horizon::fund_account(&public_key, &network).await {
                 Ok(_) => {
                     if let Some(w) = cfg.wallets.iter_mut().find(|w| w.name == name) {
                         w.funded = true;
@@ -710,7 +710,7 @@ fn list() -> Result<()> {
     Ok(())
 }
 
-fn show(name: String, reveal: bool) -> Result<()> {
+async fn show(name: String, reveal: bool) -> Result<()> {
     let cfg = config::load()?;
     let w = cfg
         .wallets
@@ -759,7 +759,7 @@ fn show(name: String, reveal: bool) -> Result<()> {
     p::separator();
 
     p::info(&format!("Fetching live balance on {}â€¦", w.network));
-    match horizon::fetch_account(&w.public_key, &w.network) {
+    match horizon::fetch_account(&w.public_key, &w.network).await {
         Ok(account) => {
             println!();
             for bal in &account.balances {
@@ -774,7 +774,7 @@ fn show(name: String, reveal: bool) -> Result<()> {
     Ok(())
 }
 
-fn fund_wallet(name: String) -> Result<()> {
+async fn fund_wallet(name: String) -> Result<()> {
     config::validate_wallet_name(&name)?;
     let mut cfg = config::load()?;
 
@@ -796,7 +796,7 @@ fn fund_wallet(name: String) -> Result<()> {
         "Funding '{}' via configured network faucet…",
         name
     ));
-    horizon::fund_account(&public_key, &cfg.network)?;
+    horizon::fund_account(&public_key, &cfg.network).await?;
 
     if let Some(w) = cfg.wallets.iter_mut().find(|w| w.name == name) {
         w.funded = true;
@@ -891,7 +891,7 @@ fn native_xlm_balance(account: &horizon::AccountResponse) -> f64 {
         .unwrap_or(0.0)
 }
 
-fn merge_wallet(
+async fn merge_wallet(
     from: String,
     to: String,
     network_override: Option<String>,
@@ -934,7 +934,7 @@ fn merge_wallet(
     p::separator();
     println!();
     p::step(1, 3, "Fetching source account…");
-    let source_account = horizon::fetch_account(&wallet.public_key, &network).map_err(|e| {
+    let source_account = horizon::fetch_account(&wallet.public_key, &network).await.map_err(|e| {
         anyhow::anyhow!(
             "Source account not found on {}: {}\nIt may already be merged or never funded.",
             network,
@@ -954,7 +954,7 @@ fn merge_wallet(
     }
 
     p::step(2, 3, "Validating destination account…");
-    horizon::fetch_account(&destination, &network).map_err(|_| {
+    horizon::fetch_account(&destination, &network).await.map_err(|_| {
         anyhow::anyhow!(
             "Destination account does not exist on {}. \
              The destination must be funded before it can receive a merge.",
@@ -1021,7 +1021,7 @@ fn merge_wallet(
     let secret_key = wallet_secret_key(wallet)?;
     p::info("Submitting account merge…");
     let submit_result =
-        horizon::submit_payment_transaction(&tx_result.transaction_xdr, &secret_key, &network)?;
+        horizon::submit_payment_transaction(&tx_result.transaction_xdr, &secret_key, &network).await?;
 
     println!();
     p::separator();
@@ -1089,7 +1089,7 @@ fn rename(old_name: String, new_name: String) -> Result<()> {
     Ok(())
 }
 
-fn rotate_wallet(
+async fn rotate_wallet(
     name: String,
     fund: bool,
     network_override: Option<String>,
@@ -1204,7 +1204,7 @@ fn rotate_wallet(
             p::warn("Friendbot is not available on Mainnet. Skipping fund step.");
         } else {
             p::step(4, steps, "Funding the replacement wallet via Friendbot...");
-            match horizon::fund_account(&public_key, &network) {
+            match horizon::fund_account(&public_key, &network).await {
                 Ok(_) => {
                     if let Some(wallet) = cfg.wallets.iter_mut().find(|wallet| wallet.name == name)
                     {
@@ -1776,7 +1776,7 @@ fn derive_addresses() -> Result<()> {
     Ok(())
 }
 
-fn handle_multisig(cmd: MultisigCommands) -> Result<()> {
+async fn handle_multisig(cmd: MultisigCommands) -> Result<()> {
     match cmd {
         MultisigCommands::Create {
             name,
@@ -1796,7 +1796,7 @@ fn handle_multisig(cmd: MultisigCommands) -> Result<()> {
             name,
             transaction,
             network,
-        } => multisig_submit(name, transaction, network),
+        } => multisig_submit(name, transaction, network).await,
     }
 }
 
@@ -2022,7 +2022,7 @@ fn multisig_show(name: String) -> Result<()> {
     Ok(())
 }
 
-fn multisig_submit(name: String, transaction: PathBuf, network: Option<String>) -> Result<()> {
+async fn multisig_submit(name: String, transaction: PathBuf, network: Option<String>) -> Result<()> {
     config::validate_wallet_name(&name)?;
     config::validate_file_path(&transaction, Some("json"))?;
 
@@ -2050,7 +2050,7 @@ fn multisig_submit(name: String, transaction: PathBuf, network: Option<String>) 
     let signed_xdr = multisig::combine_signatures(&tx.transaction_xdr, &tx.signatures)?;
 
     p::step(2, 2, &format!("Submitting to Horizon ({})â€¦", network));
-    let result = horizon::submit_multisig_transaction(&signed_xdr, &network)?;
+    let result = horizon::submit_multisig_transaction(&signed_xdr, &network).await?;
 
     println!();
     p::success("Transaction submitted");

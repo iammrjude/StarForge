@@ -38,7 +38,7 @@ pub struct InvokeArgs {
 }
 
 #[allow(dead_code)]
-pub fn handle(args: InvokeArgs) -> Result<()> {
+pub async fn handle(args: InvokeArgs) -> Result<()> {
     let cfg = config::load()?;
     let network = args.network.as_ref().unwrap_or(&cfg.network);
 
@@ -99,7 +99,7 @@ pub fn handle(args: InvokeArgs) -> Result<()> {
         &arg_type_list,
         network,
         submit_wallet.map(|w| w as &crate::utils::config::WalletEntry),
-    )?;
+    ).await?;
 
     println!();
     p::success("Simulation successful!");

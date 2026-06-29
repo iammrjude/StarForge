@@ -393,7 +393,7 @@ pub fn analyse_source(content: &str, file: &str) -> Vec<TransformSuggestion> {
 
 // ── Command handlers ──────────────────────────────────────────────────────────
 
-pub fn handle(cmd: OptimizeCommands) -> Result<()> {
+pub async fn handle(cmd: OptimizeCommands) -> Result<()> {
     match cmd {
         OptimizeCommands::Analyse(args) => handle_analyse(args),
         OptimizeCommands::Transform(args) => handle_transform(args),

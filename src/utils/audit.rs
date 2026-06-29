@@ -133,12 +133,12 @@ pub fn get_audit_report(start_time: Option<&str>, end_time: Option<&str>) -> Res
         .iter()
         .filter(|e| {
             if let Some(start) = start_time {
-                if e.timestamp < start {
+                if e.timestamp.as_str() < start {
                     return false;
                 }
             }
             if let Some(end) = end_time {
-                if e.timestamp > end {
+                if e.timestamp.as_str() > end {
                     return false;
                 }
             }

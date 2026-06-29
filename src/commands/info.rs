@@ -3,7 +3,7 @@ use anyhow::Result;
 use colored::*;
 use std::path::PathBuf;
 
-pub fn handle() -> Result<()> {
+pub async fn handle() -> Result<()> {
     p::header("starforge Environment");
     p::separator();
 
@@ -22,7 +22,7 @@ pub fn handle() -> Result<()> {
     p::info("Checking network connectivity…");
     println!();
     for net in ["testnet", "mainnet"] {
-        let online = horizon::check_network(net);
+        let online = horizon::check_network(net).await;
         println!(
             "  {} {:<10}  {}",
             "◎".cyan(),

@@ -48,7 +48,7 @@ pub enum NetworkCommands {
     },
 }
 
-pub fn handle(cmd: NetworkCommands) -> Result<()> {
+pub async fn handle(cmd: NetworkCommands) -> Result<()> {
     match cmd {
         NetworkCommands::Show => show(),
         NetworkCommands::Switch { network } => switch(network),
@@ -65,7 +65,7 @@ pub fn handle(cmd: NetworkCommands) -> Result<()> {
             friendbot_url,
             passphrase,
         ),
-        NetworkCommands::Test { network } => test_network(network),
+        NetworkCommands::Test { network } => test_network(network).await,
         NetworkCommands::Remove { name } => remove_network(name),
         NetworkCommands::Rename { old_name, new_name } => rename_network(old_name, new_name),
     }
@@ -179,7 +179,7 @@ fn add_network(
     Ok(())
 }
 
-fn test_network(network_name: Option<String>) -> Result<()> {
+async fn test_network(network_name: Option<String>) -> Result<()> {
     let cfg = config::load()?;
     let test_network = network_name.unwrap_or_else(|| cfg.network.clone());
 

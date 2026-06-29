@@ -98,10 +98,10 @@ pub struct GenerateBindingsArgs {
     pub lang: BindingLang,
 }
 
-pub fn handle(cmd: ContractCommands) -> Result<()> {
+pub async fn handle(cmd: ContractCommands) -> Result<()> {
     match cmd {
-        ContractCommands::Invoke(args) => handle_invoke(args),
-        ContractCommands::Inspect(args) => handle_inspect(args),
+        ContractCommands::Invoke(args) => handle_invoke(args).await,
+        ContractCommands::Inspect(args) => handle_inspect(args).await,
         ContractCommands::Upload(args) => handle_upload(args),
         ContractCommands::GenerateBindings(args) => handle_generate_bindings(args),
         ContractCommands::CallGraph(args) => handle_call_graph(args),
@@ -120,7 +120,7 @@ fn handle_generate_bindings(args: GenerateBindingsArgs) -> Result<()> {
     Ok(())
 }
 
-fn handle_inspect(args: InspectArgs) -> Result<()> {
+async fn handle_inspect(args: InspectArgs) -> Result<()> {
     config::validate_contract_id(&args.contract_id)?;
     if let Some(ref net) = args.network {
         config::validate_network(net)?;
@@ -135,7 +135,7 @@ fn handle_inspect(args: InspectArgs) -> Result<()> {
 
     println!();
     p::step(1, 1, "Querying contract instance from Soroban RPC…");
-    let inspect = soroban::inspect_contract(&args.contract_id, &network)?;
+    let inspect = soroban::inspect_contract(&args.contract_id, &network).await?;
 
     if args.json {
         println!("{}", serde_json::to_string_pretty(&inspect)?);
@@ -191,7 +191,7 @@ fn handle_inspect(args: InspectArgs) -> Result<()> {
     Ok(())
 }
 
-fn handle_invoke(args: InvokeArgs) -> Result<()> {
+async fn handle_invoke(args: InvokeArgs) -> Result<()> {
     p::header("Invoke Soroban Contract");
 
     config::validate_contract_id(&args.contract_id)?;
@@ -291,7 +291,7 @@ fn handle_invoke(args: InvokeArgs) -> Result<()> {
         &arg_types,
         &args.network,
         submit_wallet.as_ref(),
-    )?;
+    ).await?;
 
     let simulation_result = outcome.simulation;
     p::kv_accent("Simulation", "✓ Success");

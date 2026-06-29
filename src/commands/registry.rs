@@ -107,7 +107,7 @@ pub enum RegistryCommands {
     },
 }
 
-pub fn handle(cmd: RegistryCommands) -> Result<()> {
+pub async fn handle(cmd: RegistryCommands) -> Result<()> {
     match cmd {
         RegistryCommands::Search {
             query,

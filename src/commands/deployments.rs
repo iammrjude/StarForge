@@ -84,11 +84,11 @@ pub struct ApproveArgs {
     pub approver: String,
 }
 
-pub fn handle(cmd: DeploymentsCommands) -> Result<()> {
+pub async fn handle(cmd: DeploymentsCommands) -> Result<()> {
     match cmd {
         DeploymentsCommands::History(args) => handle_history(args),
         DeploymentsCommands::Rollback(args) => handle_rollback(args),
-        DeploymentsCommands::Verify(args) => handle_verify(args),
+        DeploymentsCommands::Verify(args) => handle_verify(args).await,
         DeploymentsCommands::Dashboard(args) => handle_dashboard(args),
         DeploymentsCommands::Approve(args) => handle_approve(args),
     }
@@ -241,7 +241,7 @@ fn handle_rollback(args: RollbackArgs) -> Result<()> {
     Ok(())
 }
 
-fn handle_verify(args: VerifyArgs) -> Result<()> {
+async fn handle_verify(args: VerifyArgs) -> Result<()> {
     p::header("Deployment Verification");
 
     let record = get_record(&args.id)?
@@ -270,7 +270,7 @@ fn handle_verify(args: VerifyArgs) -> Result<()> {
     p::kv("[1/2] Wallet", &record.wallet);
     let cfg = config::load()?;
     if let Some(wallet) = cfg.wallets.iter().find(|w| w.name == record.wallet) {
-        match horizon::fetch_account(&wallet.public_key, &record.network) {
+        match horizon::fetch_account(&wallet.public_key, &record.network).await {
             Ok(_) => {
                 checks_passed += 1;
                 p::success("      Wallet account is active on-chain");

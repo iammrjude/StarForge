@@ -12,7 +12,7 @@ pub enum TelemetryCommands {
     Status,
 }
 
-pub fn handle(cmd: TelemetryCommands) -> Result<()> {
+pub async fn handle(cmd: TelemetryCommands) -> Result<()> {
     match cmd {
         TelemetryCommands::Enable => {
             telemetry::set_telemetry_enabled(true)?;

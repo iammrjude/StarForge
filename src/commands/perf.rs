@@ -110,7 +110,7 @@ pub enum PerfCommands {
     },
 }
 
-pub fn handle(cmd: PerfCommands) -> Result<()> {
+pub async fn handle(cmd: PerfCommands) -> Result<()> {
     match cmd {
         PerfCommands::Record {
             contract,

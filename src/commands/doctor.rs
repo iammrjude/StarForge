@@ -2,7 +2,7 @@ use crate::commands::info;
 use crate::utils::{config, horizon, print as p, soroban};
 use anyhow::Result;
 
-pub fn run() -> Result<()> {
+pub async fn run() -> Result<()> {
     p::header("StarForge Config Doctor");
     p::separator();
 
@@ -28,7 +28,7 @@ pub fn run() -> Result<()> {
     findings.extend(config::validate_config_integrity(&cfg));
 
     let network = cfg.network.clone();
-    if horizon::check_network(&network) {
+    if horizon::check_network(&network).await {
         findings.push(config::DoctorFinding::pass(
             "horizon",
             format!("Horizon reachable for '{network}'"),
@@ -42,7 +42,7 @@ pub fn run() -> Result<()> {
 
     match soroban::rpc_url(&network) {
         Ok(url) => {
-            if soroban::check_soroban_rpc_url(&url) {
+            if soroban::check_soroban_rpc_url(&url).await {
                 findings.push(config::DoctorFinding::pass(
                     "soroban",
                     format!("Soroban RPC reachable for '{network}'"),

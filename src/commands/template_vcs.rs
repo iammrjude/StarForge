@@ -72,7 +72,7 @@ pub enum TemplateVcsCommands {
     },
 }
 
-pub fn handle(cmd: TemplateVcsCommands) -> Result<()> {
+pub async fn handle(cmd: TemplateVcsCommands) -> Result<()> {
     match cmd {
         TemplateVcsCommands::Init { path, name } => init(path, name),
         TemplateVcsCommands::Commit {

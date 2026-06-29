@@ -357,7 +357,7 @@ mod property_tests {{
 
 // ── Command handlers ──────────────────────────────────────────────────────────
 
-pub fn handle(cmd: VerifyCommands) -> Result<()> {
+pub async fn handle(cmd: VerifyCommands) -> Result<()> {
     match cmd {
         VerifyCommands::Harness(args) => handle_harness(args),
         VerifyCommands::Property(cmd) => match cmd {

@@ -20,7 +20,7 @@ pub struct ShellArgs {
     pub history_max_lines: usize,
 }
 
-pub fn handle(args: ShellArgs) -> Result<()> {
+pub async fn handle(args: ShellArgs) -> Result<()> {
     p::header("Interactive Contract Shell");
     p::separator();
     p::kv("Contract WASM", &args.contract);

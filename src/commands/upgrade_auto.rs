@@ -383,7 +383,7 @@ mod tests {{
 
 // ── Command handlers ──────────────────────────────────────────────────────────
 
-pub fn handle(cmd: UpgradeAutoCommands) -> Result<()> {
+pub async fn handle(cmd: UpgradeAutoCommands) -> Result<()> {
     match cmd {
         UpgradeAutoCommands::Compat(args) => handle_compat(args),
         UpgradeAutoCommands::Plan(args) => handle_plan(args),

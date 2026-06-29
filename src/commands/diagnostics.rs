@@ -12,7 +12,7 @@ pub struct DiagnosticsArgs {
 
 /// Handles the `starforge diagnostics` command by bridging execution
 /// to the internal TypeScript/JavaScript hardware utility layer.
-pub fn handle(args: DiagnosticsArgs) -> Result<()> {
+pub async fn handle(args: DiagnosticsArgs) -> Result<()> {
     println!(
         "{}",
         "🔍 Checking system environment for Node.js runtime...".dimmed()

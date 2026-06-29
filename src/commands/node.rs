@@ -13,7 +13,7 @@ pub enum NodeCommands {
     },
 }
 
-pub fn handle(cmd: NodeCommands) -> Result<()> {
+pub async fn handle(cmd: NodeCommands) -> Result<()> {
     match cmd {
         NodeCommands::Start { port } => start(port),
     }

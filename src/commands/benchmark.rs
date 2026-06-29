@@ -38,7 +38,7 @@ struct PhaseMetric {
     ms: u128,
 }
 
-pub fn handle(args: BenchmarkArgs) -> Result<()> {
+pub async fn handle(args: BenchmarkArgs) -> Result<()> {
     let mut profiler = Profiler::start();
     p::header("Benchmark");
 

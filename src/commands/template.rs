@@ -135,7 +135,7 @@ pub enum TemplateCommands {
     },
 }
 
-pub fn handle(cmd: TemplateCommands) -> Result<()> {
+pub async fn handle(cmd: TemplateCommands) -> Result<()> {
     match cmd {
         TemplateCommands::Import {
             path,

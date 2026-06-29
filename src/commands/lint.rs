@@ -18,7 +18,7 @@ pub struct LintFinding {
     pub severity: String,
 }
 
-pub fn handle(args: LintArgs) -> Result<()> {
+pub async fn handle(args: LintArgs) -> Result<()> {
     let path = Path::new(&args.path);
 
     if !path.exists() {

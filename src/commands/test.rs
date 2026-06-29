@@ -38,7 +38,7 @@ pub struct TestArgs {
     pub contract_path: Option<PathBuf>,
 }
 
-pub fn handle(args: TestArgs) -> Result<()> {
+pub async fn handle(args: TestArgs) -> Result<()> {
     config::validate_file_path(&args.wasm, Some("wasm"))?;
     if args.coverage && args.source.is_none() {
         anyhow::bail!("--coverage requires --source");

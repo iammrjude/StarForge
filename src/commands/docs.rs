@@ -52,7 +52,7 @@ pub enum DocsCommands {
     },
 }
 
-pub fn handle(cmd: DocsCommands) -> Result<()> {
+pub async fn handle(cmd: DocsCommands) -> Result<()> {
     match cmd {
         DocsCommands::Generate {
             contract,

@@ -57,7 +57,7 @@ pub struct StatusArgs {
     pub id: String,
 }
 
-pub fn handle(cmd: OrchestrateCommands) -> Result<()> {
+pub async fn handle(cmd: OrchestrateCommands) -> Result<()> {
     match cmd {
         OrchestrateCommands::Plan(args) => handle_plan(args),
         OrchestrateCommands::Execute(args) => handle_execute(args),

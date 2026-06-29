@@ -16,7 +16,7 @@ pub enum TutorialCommands {
     Status,
 }
 
-pub fn handle(cmd: TutorialCommands) -> Result<()> {
+pub async fn handle(cmd: TutorialCommands) -> Result<()> {
     match cmd {
         TutorialCommands::List => list(),
         TutorialCommands::Start { slug } => start(slug),

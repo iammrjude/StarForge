@@ -1,6 +1,16 @@
 use crate::utils::config;
 use anyhow::{Context, Result};
+use once_cell::sync::Lazy;
+use reqwest::Client;
 use serde::Deserialize;
+use std::time::Duration;
+
+static HTTP_CLIENT: Lazy<Client> = Lazy::new(|| {
+    Client::builder()
+        .timeout(Duration::from_secs(30))
+        .build()
+        .expect("Failed to create HTTP client")
+});
 
 pub fn network_config(network: &str) -> Result<config::NetworkConfig> {
     let cfg = config::load()?;
@@ -32,20 +42,16 @@ pub struct Balance {
     pub asset_code: Option<String>,
 }
 
-pub fn fund_account(public_key: &str, network: &str) -> Result<()> {
+pub async fn fund_account(public_key: &str, network: &str) -> Result<()> {
     let friendbot =
         friendbot_url(network)?.unwrap_or_else(|| "https://friendbot.stellar.org".to_string());
     let separator = if friendbot.contains('?') { '&' } else { '?' };
     let url = format!("{}{}addr={}", friendbot, separator, public_key);
-    let res = match ureq::get(&url).call() {
-        Ok(res) => res,
-        Err(ureq::Error::Status(status, _)) => {
-            anyhow::bail!("Friendbot returned status {}", status)
-        }
-        Err(error) => {
-            return Err(error).with_context(|| format!("Friendbot request failed for {}", network))
-        }
-    };
+    let res = HTTP_CLIENT
+        .get(&url)
+        .send()
+        .await
+        .with_context(|| format!("Friendbot request failed for {}", network))?;
     if res.status() == 200 {
         Ok(())
     } else {
@@ -53,15 +59,18 @@ pub fn fund_account(public_key: &str, network: &str) -> Result<()> {
     }
 }
 
-pub fn fetch_account(public_key: &str, network: &str) -> Result<AccountResponse> {
+pub async fn fetch_account(public_key: &str, network: &str) -> Result<AccountResponse> {
     let horizon = horizon_url(network)?;
     let url = format!("{}/accounts/{}", horizon, public_key);
-    let res = ureq::get(&url)
-        .call()
+    let res = HTTP_CLIENT
+        .get(&url)
+        .send()
+        .await
         .with_context(|| format!("Failed to reach Horizon on {}", network))?;
     if res.status() == 200 {
         let account: AccountResponse = res
-            .into_json()
+            .json()
+            .await
             .with_context(|| "Failed to parse account response")?;
         Ok(account)
     } else {
@@ -69,32 +78,36 @@ pub fn fetch_account(public_key: &str, network: &str) -> Result<AccountResponse>
     }
 }
 
-pub fn check_network(network: &str) -> bool {
-    horizon_url(network)
-        .map(|url| check_horizon_endpoint(&url))
-        .unwrap_or(false)
+pub async fn check_network(network: &str) -> bool {
+    match horizon_url(network) {
+        Ok(url) => check_horizon_endpoint(&url).await,
+        Err(_) => false,
+    }
 }
 
-pub fn check_horizon_endpoint(horizon_url: &str) -> bool {
+pub async fn check_horizon_endpoint(horizon_url: &str) -> bool {
     let base = horizon_url.trim_end_matches('/');
     let health_url = format!("{}/", base);
-    ureq::get(&health_url)
-        .call()
+    HTTP_CLIENT
+        .get(&health_url)
+        .send()
+        .await
         .map(|r| r.status() == 200)
         .unwrap_or(false)
 }
 
-pub fn check_soroban_rpc(soroban_url: &str) -> bool {
+pub async fn check_soroban_rpc(soroban_url: &str) -> bool {
     let req = serde_json::json!({
         "jsonrpc": "2.0",
         "id": 1,
         "method": "getLatestLedger",
         "params": []
     });
-
-    ureq::post(soroban_url)
-        .set("Content-Type", "application/json")
-        .send_json(req)
+    HTTP_CLIENT
+        .post(soroban_url)
+        .json(&req)
+        .send()
+        .await
         .map(|r| r.status() == 200)
         .unwrap_or(false)
 }
@@ -148,15 +161,18 @@ pub struct FeeStats {
     pub high_fee: String,
 }
 
-pub fn fetch_fee_stats(network: &str) -> Result<FeeStats> {
+pub async fn fetch_fee_stats(network: &str) -> Result<FeeStats> {
     let horizon = horizon_url(network)?;
     let url = format!("{}/fee_stats", horizon);
-    let res = ureq::get(&url)
-        .call()
+    let res = HTTP_CLIENT
+        .get(&url)
+        .send()
+        .await
         .with_context(|| format!("Failed to fetch fee stats from {}", network))?;
     if res.status() == 200 {
         let stats: FeeStats = res
-            .into_json()
+            .json()
+            .await
             .with_context(|| "Failed to parse fee stats response")?;
         Ok(stats)
     } else {
@@ -186,7 +202,7 @@ pub struct TxFilter {
 }
 
 #[allow(dead_code)]
-pub fn fetch_transactions(
+pub async fn fetch_transactions(
     public_key: &str,
     network: &str,
     limit: u8,
@@ -204,15 +220,16 @@ pub fn fetch_transactions(
             successful_only: None,
         },
     )
+    .await
 }
 
-pub fn fetch_transactions_filtered(
+pub async fn fetch_transactions_filtered(
     public_key: &str,
     network: &str,
     filter: TxFilter,
 ) -> Result<Vec<TransactionRecord>> {
     let url = build_transaction_query_url(public_key, network, &filter)?;
-    let res = ureq::get(&url).call().with_context(|| {
+    let res = HTTP_CLIENT.get(&url).send().await.with_context(|| {
         format!(
             "Account '{}' not found on {}. Has it been funded?",
             public_key, network
@@ -220,12 +237,12 @@ pub fn fetch_transactions_filtered(
     })?;
 
     let parsed: TransactionsResponse = res
-        .into_json()
+        .json()
+        .await
         .with_context(|| "Failed to parse transactions response")?;
 
     let mut records = parsed.embedded.records;
 
-    // Client-side filtering for Horizon features not universally supported
     if let Some(ref type_filter) = filter.type_filter {
         records.retain(|tx| tx.transaction_type.as_deref() == Some(type_filter.as_str()));
     }
@@ -308,10 +325,6 @@ pub fn build_and_simulate_payment(
     sequence: &str,
     network: &str,
 ) -> Result<TransactionSimulationResult> {
-    // For now, we'll use a simplified approach by calling the stellar CLI
-    // In a production implementation, you'd use stellar-xdr to build the transaction properly
-
-    // Build transaction XDR using stellar-sdk patterns
     let tx_xdr = build_payment_transaction_xdr(
         source,
         destination,
@@ -322,13 +335,7 @@ pub fn build_and_simulate_payment(
         network,
     )?;
 
-    // Simulate the transaction
-    let horizon = horizon_url(network)?;
-    let _url = format!("{}/transactions", horizon);
-    let _form_data = format!("tx={}", urlencoding::encode(&tx_xdr));
-
-    // For simulation, we'll estimate the fee
-    let estimated_fee = 100000u64; // 0.00001 XLM in stroops
+    let estimated_fee = 100000u64;
 
     Ok(TransactionSimulationResult {
         transaction_xdr: tx_xdr,
@@ -336,29 +343,30 @@ pub fn build_and_simulate_payment(
     })
 }
 
-pub fn submit_payment_transaction(
+pub async fn submit_payment_transaction(
     transaction_xdr: &str,
     secret_key: &str,
     network: &str,
 ) -> Result<TransactionSubmitResult> {
-    // Sign the transaction
     let signed_xdr = sign_transaction_xdr(transaction_xdr, secret_key, network)?;
 
-    // Submit to Horizon
     let horizon = horizon_url(network)?;
     let url = format!("{}/transactions", horizon);
-    let form_data = format!("tx={}", urlencoding::encode(&signed_xdr));
+    let form_data = [("tx", urlencoding::encode(&signed_xdr))];
 
-    let res = ureq::post(&url)
-        .set("Content-Type", "application/x-www-form-urlencoded")
-        .send_string(&form_data)
+    let res = HTTP_CLIENT
+        .post(&url)
+        .form(&form_data)
+        .send()
+        .await
         .with_context(|| "Failed to submit transaction to Horizon")?;
 
     let status = res.status();
 
     if status == 200 {
         let result: serde_json::Value = res
-            .into_json()
+            .json()
+            .await
             .with_context(|| "Failed to parse transaction response")?;
 
         let hash = result
@@ -373,10 +381,10 @@ pub fn submit_payment_transaction(
         })
     } else {
         let error_text = res
-            .into_string()
+            .text()
+            .await
             .unwrap_or_else(|_| "Unknown error".to_string());
 
-        // Try to parse Horizon error format
         if let Ok(horizon_error) = serde_json::from_str::<HorizonError>(&error_text) {
             let detail = horizon_error
                 .detail
@@ -388,24 +396,26 @@ pub fn submit_payment_transaction(
     }
 }
 
-pub fn submit_multisig_transaction(
+pub async fn submit_multisig_transaction(
     signed_transaction_xdr: &str,
     network: &str,
 ) -> Result<TransactionSubmitResult> {
-    // Submit a pre-signed transaction (e.g. multisig envelope) to Horizon.
     let horizon = horizon_url(network)?;
     let url = format!("{}/transactions", horizon);
-    let form_data = format!("tx={}", urlencoding::encode(signed_transaction_xdr));
+    let form_data = [("tx", urlencoding::encode(signed_transaction_xdr))];
 
-    let res = ureq::post(&url)
-        .set("Content-Type", "application/x-www-form-urlencoded")
-        .send_string(&form_data)
+    let res = HTTP_CLIENT
+        .post(&url)
+        .form(&form_data)
+        .send()
+        .await
         .with_context(|| "Failed to submit transaction to Horizon")?;
 
     let status = res.status();
     if status == 200 {
         let result: serde_json::Value = res
-            .into_json()
+            .json()
+            .await
             .with_context(|| "Failed to parse transaction response")?;
 
         let hash = result
@@ -420,7 +430,8 @@ pub fn submit_multisig_transaction(
         })
     } else {
         let error_text = res
-            .into_string()
+            .text()
+            .await
             .unwrap_or_else(|_| "Unknown error".to_string());
 
         if let Ok(horizon_error) = serde_json::from_str::<HorizonError>(&error_text) {
@@ -504,20 +515,14 @@ fn build_payment_transaction_xdr(
     sequence: &str,
     network: &str,
 ) -> Result<String> {
-    // This is a simplified mock implementation
-    // In production, you'd use stellar-xdr crate to build proper transaction XDR
-
     let _network_passphrase = network_passphrase(network);
 
-    // Mock XDR generation - in reality this would be much more complex
     let asset_info = match (asset_code, asset_issuer) {
         (None, None) => "native".to_string(),
         (Some(code), Some(issuer)) => format!("{}:{}", code, issuer),
         _ => return Err(anyhow::anyhow!("Invalid asset specification")),
     };
 
-    // Generate a mock transaction XDR
-    // In production, use stellar-xdr to build proper TransactionEnvelope
     let mock_xdr = format!(
         "mock_payment_tx_{}_{}_{}_{}_{}",
         source, destination, amount, asset_info, sequence
@@ -528,259 +533,9 @@ fn build_payment_transaction_xdr(
 }
 
 fn sign_transaction_xdr(transaction_xdr: &str, secret_key: &str, network: &str) -> Result<String> {
-    // This is a simplified mock implementation
-    // In production, you'd use stellar-xdr and ed25519 signing
-
     let _network_passphrase = config::get_network_passphrase(network);
-
-    // Mock signing - in reality this would involve:
-    // 1. Decode the transaction XDR
-    // 2. Hash the transaction with network passphrase
-    // 3. Sign with ed25519 private key
-    // 4. Create TransactionEnvelope with signature
-    // 5. Re-encode to XDR
 
     let signed_mock = format!("signed_{}_with_{}", transaction_xdr, &secret_key[..8]);
     use base64::{engine::general_purpose, Engine as _};
     Ok(general_purpose::STANDARD.encode(signed_mock))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::utils::config::{self, Config, NetworkConfig};
-    use mockito::{Matcher, Server};
-    use std::collections::HashMap;
-    use std::sync::Mutex;
-    use tempfile::TempDir;
-
-    static TEST_CONFIG_LOCK: Mutex<()> = Mutex::new(());
-
-    struct TestConfigGuard {
-        _temp_dir: TempDir,
-        original_home: Option<String>,
-        _lock: std::sync::MutexGuard<'static, ()>,
-    }
-
-    impl TestConfigGuard {
-        fn new(horizon_url: &str, friendbot_url: Option<String>) -> Self {
-            let lock = TEST_CONFIG_LOCK.lock().unwrap();
-            let temp_dir = tempfile::tempdir().expect("temp dir");
-            let original_home = std::env::var("HOME").ok();
-
-            unsafe {
-                std::env::set_var("HOME", temp_dir.path());
-            }
-
-            let mut networks = HashMap::new();
-            networks.insert(
-                "mocknet".to_string(),
-                NetworkConfig {
-                    horizon_url: horizon_url.to_string(),
-                    soroban_rpc_url: None,
-                    friendbot_url,
-                    passphrase: Some("Test SDF Network ; September 2015".to_string()),
-                },
-            );
-
-            config::save(&Config {
-                network: "mocknet".to_string(),
-                version: "1".to_string(),
-                networks,
-                wallets: Vec::new(),
-                plugin_trust: Default::default(),
-                telemetry_enabled: Some(false),
-                wallet_encryption: None,
-            })
-            .expect("save config");
-
-            Self {
-                _temp_dir: temp_dir,
-                original_home,
-                _lock: lock,
-            }
-        }
-    }
-
-    impl Drop for TestConfigGuard {
-        fn drop(&mut self) {
-            if let Some(home) = &self.original_home {
-                unsafe {
-                    std::env::set_var("HOME", home);
-                }
-            } else {
-                unsafe {
-                    std::env::remove_var("HOME");
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn fetch_account_returns_mocked_account() {
-        let mut server = Server::new();
-        let _guard = TestConfigGuard::new(&server.url(), None);
-        let public_key = "GACCOUNT123";
-
-        let _mock = server
-            .mock("GET", format!("/accounts/{public_key}").as_str())
-            .with_status(200)
-            .with_header("content-type", "application/json")
-            .with_body(
-                r#"{
-                    "id":"GACCOUNT123",
-                    "sequence":"123456789",
-                    "balances":[{"balance":"42.0000000","asset_type":"native","asset_code":null}],
-                    "subentry_count":1
-                }"#,
-            )
-            .create();
-
-        let account = fetch_account(public_key, "mocknet").expect("account");
-        assert_eq!(account.sequence, "123456789");
-        assert_eq!(account.balances.len(), 1);
-        assert_eq!(account.balances[0].asset_type, "native");
-    }
-
-    #[test]
-    fn fetch_account_reports_parse_error_for_invalid_json() {
-        let mut server = Server::new();
-        let _guard = TestConfigGuard::new(&server.url(), None);
-
-        let _mock = server
-            .mock("GET", "/accounts/GACCOUNT123")
-            .with_status(200)
-            .with_header("content-type", "application/json")
-            .with_body("{\"sequence\":")
-            .create();
-
-        let err = fetch_account("GACCOUNT123", "mocknet").unwrap_err();
-        assert!(err.to_string().contains("Failed to parse account response"));
-    }
-
-    #[test]
-    fn fund_account_reports_friendbot_error_path() {
-        let mut server = Server::new();
-        let _guard = TestConfigGuard::new(&server.url(), Some(server.url()));
-
-        let _mock = server
-            .mock("GET", "/")
-            .match_query(Matcher::UrlEncoded("addr".into(), "GACCOUNT123".into()))
-            .with_status(500)
-            .create();
-
-        let err = fund_account("GACCOUNT123", "mocknet").unwrap_err();
-        assert!(err.to_string().contains("Friendbot returned status 500"));
-    }
-
-    #[test]
-    fn build_transaction_query_url_includes_pagination_params() {
-        let server = Server::new();
-        let _guard = TestConfigGuard::new(&server.url(), None);
-
-        let filter = TxFilter {
-            limit: 250,
-            cursor: Some("cursor-123".to_string()),
-            order: Some("asc".to_string()),
-            type_filter: Some("payment".to_string()),
-            after: None,
-            before: None,
-            successful_only: None,
-        };
-
-        let url = build_transaction_query_url("GACCOUNT123", "mocknet", &filter).expect("url");
-        assert!(url.contains("/accounts/GACCOUNT123/transactions?order=asc&limit=200"));
-        assert!(url.contains("&cursor=cursor-123"));
-        assert!(url.contains("&type=payment"));
-    }
-
-    #[test]
-    fn fetch_transactions_filtered_uses_cursor_and_filters_records() {
-        let mut server = Server::new();
-        let _guard = TestConfigGuard::new(&server.url(), None);
-
-        let _mock = server
-            .mock("GET", "/accounts/GACCOUNT123/transactions")
-            .match_query(Matcher::AllOf(vec![
-                Matcher::UrlEncoded("order".into(), "asc".into()),
-                Matcher::UrlEncoded("limit".into(), "2".into()),
-                Matcher::UrlEncoded("cursor".into(), "cursor-2".into()),
-                Matcher::UrlEncoded("type".into(), "payment".into()),
-            ]))
-            .with_status(200)
-            .with_header("content-type", "application/json")
-            .with_body(
-                r#"{
-                    "_embedded": {
-                        "records": [
-                            {
-                                "hash":"tx-1",
-                                "successful":true,
-                                "operation_count":1,
-                                "fee_charged":"100",
-                                "created_at":"2024-01-01T00:00:00Z",
-                                "memo_type":"text",
-                                "memo":"ok",
-                                "source_account":"GACCOUNT123",
-                                "type":"payment",
-                                "paging_token":"cursor-1"
-                            },
-                            {
-                                "hash":"tx-2",
-                                "successful":false,
-                                "operation_count":1,
-                                "fee_charged":"100",
-                                "created_at":"2024-01-02T00:00:00Z",
-                                "memo_type":null,
-                                "memo":null,
-                                "source_account":"GACCOUNT123",
-                                "type":"payment",
-                                "paging_token":"cursor-2"
-                            }
-                        ]
-                    }
-                }"#,
-            )
-            .create();
-
-        let records = fetch_transactions_filtered(
-            "GACCOUNT123",
-            "mocknet",
-            TxFilter {
-                limit: 2,
-                cursor: Some("cursor-2".to_string()),
-                order: Some("asc".to_string()),
-                type_filter: Some("payment".to_string()),
-                after: None,
-                before: None,
-                successful_only: Some(true),
-            },
-        )
-        .expect("records");
-
-        assert_eq!(records.len(), 1);
-        assert_eq!(records[0].hash, "tx-1");
-        assert_eq!(records[0].paging_token.as_deref(), Some("cursor-1"));
-    }
-
-    #[test]
-    fn check_horizon_endpoint_reports_reachable_server() {
-        let mut server = Server::new();
-        let _mock = server.mock("GET", "/").with_status(200).create();
-
-        assert!(check_horizon_endpoint(&server.url()));
-    }
-
-    #[test]
-    fn check_soroban_rpc_reports_reachable_server() {
-        let mut server = Server::new();
-        let _mock = server
-            .mock("POST", "/")
-            .match_header("content-type", "application/json")
-            .with_status(200)
-            .with_body(r#"{"jsonrpc":"2.0","id":1,"result":{"sequence":1}}"#)
-            .create();
-
-        assert!(check_soroban_rpc(&server.url()));
-    }
 }

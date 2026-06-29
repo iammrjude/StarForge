@@ -269,20 +269,20 @@ fn short_id(id: &str) -> String {
 
 // ── Command handlers ──────────────────────────────────────────────────────────
 
-pub fn handle(cmd: UpgradeCommands) -> Result<()> {
+pub async fn handle(cmd: UpgradeCommands) -> Result<()> {
     match cmd {
-        UpgradeCommands::Prepare(args) => handle_prepare(args),
+        UpgradeCommands::Prepare(args) => handle_prepare(args).await,
         UpgradeCommands::Propose(args) => handle_propose(args),
         UpgradeCommands::List(args) => handle_list(args),
         UpgradeCommands::Status(args) => handle_list(args), // Alias for list
         UpgradeCommands::Approve(args) => handle_approve(args),
-        UpgradeCommands::Execute(args) => handle_execute(args),
+        UpgradeCommands::Execute(args) => handle_execute(args).await,
         UpgradeCommands::Rollback(args) => handle_rollback(args),
         UpgradeCommands::History(args) => handle_history(args),
     }
 }
 
-fn handle_prepare(args: PrepareArgs) -> Result<()> {
+async fn handle_prepare(args: PrepareArgs) -> Result<()> {
     p::header("Prepare Contract Upgrade");
 
     config::validate_contract_id(&args.contract_id)?;
@@ -298,7 +298,7 @@ fn handle_prepare(args: PrepareArgs) -> Result<()> {
     let wallet = cfg.wallets.first().ok_or_else(|| {
         anyhow::anyhow!("No wallets found. Create one with `starforge wallet create`")
     })?;
-    horizon::fetch_account(&wallet.public_key, &args.network)
+    horizon::fetch_account(&wallet.public_key, &args.network).await
         .map_err(|e| anyhow::anyhow!("Account not active on {}: {}", args.network, e))?;
 
     p::step(3, 3, "Generating upgrade command…");
@@ -519,7 +519,7 @@ fn handle_approve(args: ApproveArgs) -> Result<()> {
     Ok(())
 }
 
-fn handle_execute(args: ExecuteArgs) -> Result<()> {
+async fn handle_execute(args: ExecuteArgs) -> Result<()> {
     p::header("Execute Contract Upgrade");
     config::validate_network(&args.network)?;
 
@@ -591,7 +591,7 @@ fn handle_execute(args: ExecuteArgs) -> Result<()> {
 
     println!();
     p::step(1, 2, "Verifying account on-chain…");
-    horizon::fetch_account(&wallet.public_key, &args.network)
+    horizon::fetch_account(&wallet.public_key, &args.network).await
         .map_err(|e| anyhow::anyhow!("Account not active on {}: {}", args.network, e))?;
 
     p::step(2, 2, "Generating upgrade command…");
