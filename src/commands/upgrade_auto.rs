@@ -272,12 +272,8 @@ pub fn analyse_compat(old_bytes: &[u8], new_bytes: &[u8]) -> CompatCheck {
     }
 
     // Check for presence of "upgrade" export keyword in name section
-    let old_has_upgrade_fn = old_bytes
-        .windows(7)
-        .any(|w| w == b"upgrade");
-    let new_has_upgrade_fn = new_bytes
-        .windows(7)
-        .any(|w| w == b"upgrade");
+    let old_has_upgrade_fn = old_bytes.windows(7).any(|w| w == b"upgrade");
+    let new_has_upgrade_fn = new_bytes.windows(7).any(|w| w == b"upgrade");
 
     if old_has_upgrade_fn && !new_has_upgrade_fn {
         issues.push(CompatIssue {
@@ -304,7 +300,8 @@ pub fn analyse_compat(old_bytes: &[u8], new_bytes: &[u8]) -> CompatCheck {
         issues.push(CompatIssue {
             kind: "identical-binary".to_string(),
             severity: "warning".to_string(),
-            description: "Old and new WASM binaries are identical — no upgrade necessary".to_string(),
+            description: "Old and new WASM binaries are identical — no upgrade necessary"
+                .to_string(),
         });
     }
 
@@ -425,10 +422,7 @@ fn handle_compat(args: CompatArgs) -> Result<()> {
         p::kv("New size", &format!("{} bytes", compat.new_size_bytes));
         p::kv(
             "Size delta",
-            &format!(
-                "{:+} bytes",
-                compat.size_delta_bytes
-            ),
+            &format!("{:+} bytes", compat.size_delta_bytes),
         );
 
         if !compat.issues.is_empty() {
@@ -452,9 +446,7 @@ fn handle_compat(args: CompatArgs) -> Result<()> {
     }
 
     if args.fail_on_incompatible && compat.level == CompatibilityLevel::Incompatible {
-        anyhow::bail!(
-            "Compatibility check failed: new WASM is incompatible with the old version."
-        );
+        anyhow::bail!("Compatibility check failed: new WASM is incompatible with the old version.");
     }
 
     Ok(())
@@ -543,10 +535,7 @@ fn handle_apply(args: ApplyArgs) -> Result<()> {
             .iter()
             .find(|w| w.name == *name)
             .ok_or_else(|| {
-                anyhow::anyhow!(
-                    "Wallet '{}' not found. Run `starforge wallet list`.",
-                    name
-                )
+                anyhow::anyhow!("Wallet '{}' not found. Run `starforge wallet list`.", name)
             })?
     } else if !cfg.wallets.is_empty() {
         p::info(&format!(
@@ -562,13 +551,7 @@ fn handle_apply(args: ApplyArgs) -> Result<()> {
     let plan = plans
         .iter_mut()
         .find(|p| p.id == args.plan_id && p.network == args.network)
-        .ok_or_else(|| {
-            anyhow::anyhow!(
-                "Plan '{}' not found on {}",
-                args.plan_id,
-                args.network
-            )
-        })?;
+        .ok_or_else(|| anyhow::anyhow!("Plan '{}' not found on {}", args.plan_id, args.network))?;
 
     if plan.status == PlanStatus::Applied {
         anyhow::bail!("Plan '{}' has already been applied.", args.plan_id);
@@ -682,11 +665,7 @@ fn handle_plans(args: PlansArgs) -> Result<()> {
     let plans = load_plans()?;
     let filtered: Vec<_> = plans
         .iter()
-        .filter(|p| {
-            args.network
-                .as_deref()
-                .is_none_or(|n| p.network == n)
-        })
+        .filter(|p| args.network.as_deref().is_none_or(|n| p.network == n))
         .filter(|p| {
             args.contract_id
                 .as_deref()
@@ -740,9 +719,7 @@ fn handle_rollback(args: RollbackArgs) -> Result<()> {
         cfg.wallets
             .iter()
             .find(|w| w.name == *name)
-            .ok_or_else(|| {
-                anyhow::anyhow!("Wallet '{}' not found.", name)
-            })?
+            .ok_or_else(|| anyhow::anyhow!("Wallet '{}' not found.", name))?
     } else if !cfg.wallets.is_empty() {
         p::info(&format!(
             "No --wallet specified. Using: {}",
@@ -757,9 +734,7 @@ fn handle_rollback(args: RollbackArgs) -> Result<()> {
     let plan = plans
         .iter_mut()
         .find(|p| p.id == args.plan_id && p.network == args.network)
-        .ok_or_else(|| {
-            anyhow::anyhow!("Plan '{}' not found on {}.", args.plan_id, args.network)
-        })?;
+        .ok_or_else(|| anyhow::anyhow!("Plan '{}' not found on {}.", args.plan_id, args.network))?;
 
     if plan.status != PlanStatus::Applied {
         anyhow::bail!(

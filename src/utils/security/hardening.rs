@@ -30,8 +30,8 @@ pub struct HardeningResult {
 }
 
 pub fn apply_hardening(path: &Path, opts: &HardeningOptions) -> Result<HardeningResult> {
-    let content = fs::read_to_string(path)
-        .with_context(|| format!("Failed to read {}", path.display()))?;
+    let content =
+        fs::read_to_string(path).with_context(|| format!("Failed to read {}", path.display()))?;
     let patterns = resolve_patterns(opts.pattern_ids.as_deref());
     let file_str = path.to_string_lossy().to_string();
 
@@ -142,7 +142,10 @@ fn apply_fix(content: &str, pattern: &SecurityPattern) -> Option<String> {
 
     if let Some(insert) = &fix.insert_after {
         if out.contains(&insert.anchor) && !out.contains(insert.content.trim()) {
-            out = out.replace(&insert.anchor, &format!("{}{}", insert.anchor, insert.content));
+            out = out.replace(
+                &insert.anchor,
+                &format!("{}{}", insert.anchor, insert.content),
+            );
             return Some(out);
         }
     }

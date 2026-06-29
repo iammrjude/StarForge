@@ -1,4 +1,4 @@
-use crate::utils::{print as p, multisig};
+use crate::utils::{multisig_builder as multisig, print as p};
 use anyhow::Result;
 use clap::Subcommand;
 use std::path::PathBuf;
@@ -94,16 +94,13 @@ pub fn handle(cmd: MultisigCommands) -> Result<()> {
 }
 
 fn create_proposal(threshold: u32, signers: &str, network: &str) -> Result<()> {
-    p::step(&format!(
+    p::info(&format!(
         "Creating {}-of-{} multi-sig proposal",
         threshold,
         signers.split(',').count()
     ));
 
-    let signer_list: Vec<String> = signers
-        .split(',')
-        .map(|s| s.trim().to_string())
-        .collect();
+    let signer_list: Vec<String> = signers.split(',').map(|s| s.trim().to_string()).collect();
 
     if threshold as usize > signer_list.len() {
         anyhow::bail!("Threshold cannot exceed number of signers");
@@ -111,11 +108,11 @@ fn create_proposal(threshold: u32, signers: &str, network: &str) -> Result<()> {
 
     let proposal = multisig::Proposal::new(threshold, signer_list, network.to_string());
     let filename = format!("proposal_{}.json", uuid::Uuid::new_v4());
-    
+
     std::fs::write(&filename, serde_json::to_string_pretty(&proposal)?)?;
 
     println!();
-    println!("  Proposal: {}", colored::Colorize::cyan(&filename));
+    println!("  Proposal: {}", colored::Colorize::cyan(filename.as_str()));
     println!("  Threshold: {}/{}", threshold, signers.split(',').count());
     println!("  Network: {}", network);
     println!();
@@ -145,7 +142,7 @@ fn sign_proposal(proposal_path: &std::path::Path, wallet: &str) -> Result<()> {
     let contents = std::fs::read_to_string(proposal_path)?;
     let mut proposal: multisig::Proposal = serde_json::from_str(&contents)?;
 
-    p::step(&format!("Signing proposal with wallet '{}'", wallet));
+    p::info(&format!("Signing proposal with wallet '{}'", wallet));
 
     let signature = multisig::generate_signature(wallet)?;
     proposal.add_signature(wallet.to_string(), signature);
@@ -154,7 +151,11 @@ fn sign_proposal(proposal_path: &std::path::Path, wallet: &str) -> Result<()> {
 
     println!();
     println!("  Status: {}", proposal.get_status());
-    println!("  Signatures: {}/{}", proposal.signatures.len(), proposal.threshold);
+    println!(
+        "  Signatures: {}/{}",
+        proposal.signatures.len(),
+        proposal.threshold
+    );
     println!();
 
     p::success("Proposal signed");
@@ -170,17 +171,18 @@ fn view_proposal(proposal_path: &std::path::Path) -> Result<()> {
     println!("{}", colored::Colorize::cyan("═══ PROPOSAL ═══"));
     println!("ID:          {}", proposal.id);
     println!("Network:     {}", proposal.network);
-    println!("Threshold:   {}/{}", proposal.threshold, proposal.signers.len());
+    println!(
+        "Threshold:   {}/{}",
+        proposal.threshold,
+        proposal.signers.len()
+    );
     println!("Status:      {}", proposal.get_status());
     println!("Created:     {}", proposal.created_at);
     println!();
 
     println!("{}", colored::Colorize::cyan("═══ SIGNERS ═══"));
     for (idx, signer) in proposal.signers.iter().enumerate() {
-        let signed = proposal
-            .signatures
-            .iter()
-            .any(|s| s.signer == *signer);
+        let signed = proposal.signatures.iter().any(|s| s.signer == *signer);
         let marker = if signed {
             colored::Colorize::green("✓")
         } else {
@@ -234,7 +236,10 @@ fn check_status(proposal_path: &std::path::Path) -> Result<()> {
             }
         }
     } else {
-        println!("  {} All signatures collected!", colored::Colorize::green("✓"));
+        println!(
+            "  {} All signatures collected!",
+            colored::Colorize::green("✓")
+        );
     }
     println!();
 
@@ -253,8 +258,12 @@ fn submit_proposal(proposal_path: &std::path::Path, network: &str) -> Result<()>
         );
     }
 
-    p::step(&format!("Submitting proposal to {}", network));
-    println!("  Signatures: {}/{}", proposal.signatures.len(), proposal.threshold);
+    p::info(&format!("Submitting proposal to {}", network));
+    println!(
+        "  Signatures: {}/{}",
+        proposal.signatures.len(),
+        proposal.threshold
+    );
     println!();
 
     p::success("Proposal submitted successfully");
@@ -286,12 +295,8 @@ fn import_proposal(input_path: &std::path::Path, output: Option<PathBuf>) -> Res
     let contents = std::fs::read_to_string(input_path)?;
     let proposal: multisig::Proposal = serde_json::from_str(&contents)?;
 
-    let output_file = output.unwrap_or_else(|| {
-        PathBuf::from(format!(
-            "proposal_{}.json",
-            uuid::Uuid::new_v4()
-        ))
-    });
+    let output_file =
+        output.unwrap_or_else(|| PathBuf::from(format!("proposal_{}.json", uuid::Uuid::new_v4())));
 
     std::fs::write(&output_file, serde_json::to_string_pretty(&proposal)?)?;
 
@@ -325,7 +330,7 @@ fn list_templates() -> Result<()> {
 }
 
 fn from_template(template: &str, output: &std::path::Path) -> Result<()> {
-    p::step(&format!("Creating proposal from template '{}'", template));
+    p::info(&format!("Creating proposal from template '{}'", template));
 
     let (threshold, signers, name) = match template {
         "escrow" => (2, vec!["buyer", "seller", "arbiter"], "2-of-3 Escrow"),
@@ -336,7 +341,10 @@ fn from_template(template: &str, output: &std::path::Path) -> Result<()> {
         ),
         "dao" => (
             5,
-            vec!["member1", "member2", "member3", "member4", "member5", "member6", "member7", "member8", "member9"],
+            vec![
+                "member1", "member2", "member3", "member4", "member5", "member6", "member7",
+                "member8", "member9",
+            ],
             "5-of-9 DAO Treasury",
         ),
         "vault" => (2, vec!["key1", "key2"], "2-of-2 Vault"),

@@ -55,8 +55,8 @@ impl SecurityPatternLibrary {
                 name: "Missing Authorization Check".into(),
                 category: "access-control".into(),
                 severity: "high".into(),
-                description: "Public functions that mutate state should verify caller authorization."
-                    .into(),
+                description:
+                    "Public functions that mutate state should verify caller authorization.".into(),
                 detect: PatternDetector::ContainsAny {
                     needles: vec![
                         "pub fn transfer".into(),
@@ -108,7 +108,8 @@ impl SecurityPatternLibrary {
                 name: "Missing Input Validation".into(),
                 category: "defensive-programming".into(),
                 severity: "medium".into(),
-                description: "Validate inputs before processing (amount > 0, bounds checks).".into(),
+                description: "Validate inputs before processing (amount > 0, bounds checks)."
+                    .into(),
                 detect: PatternDetector::Missing {
                     required: "if amount <= 0".into(),
                 },
@@ -155,7 +156,8 @@ impl SecurityPatternLibrary {
                 name: "Missing Upgrade Authorization".into(),
                 category: "upgrade-safety".into(),
                 severity: "high".into(),
-                description: "Upgrade entrypoints should restrict callers to admin/governance.".into(),
+                description: "Upgrade entrypoints should restrict callers to admin/governance."
+                    .into(),
                 detect: PatternDetector::ContainsAny {
                     needles: vec!["pub fn upgrade".into(), "pub fn set_admin".into()],
                 },

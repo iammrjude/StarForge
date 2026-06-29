@@ -62,8 +62,8 @@ pub fn load_manifest(path: &Path) -> Result<DeployManifest> {
     config::validate_file_path(path, Some("json"))?;
     let raw = fs::read_to_string(path)
         .with_context(|| format!("Failed to read manifest: {}", path.display()))?;
-    let manifest: DeployManifest = serde_json::from_str(&raw)
-        .context("Invalid deploy manifest JSON")?;
+    let manifest: DeployManifest =
+        serde_json::from_str(&raw).context("Invalid deploy manifest JSON")?;
     if manifest.contracts.is_empty() {
         anyhow::bail!("Manifest must contain at least one contract");
     }
@@ -272,12 +272,7 @@ pub fn render_dag(manifest: &DeployManifest) -> Result<String> {
         } else {
             contract.depends_on.join(", ")
         };
-        lines.push(format!(
-            "  {}. {} ← depends on [{}]",
-            idx + 1,
-            id,
-            deps
-        ));
+        lines.push(format!("  {}. {} ← depends on [{}]", idx + 1, id, deps));
     }
 
     lines.push(String::new());

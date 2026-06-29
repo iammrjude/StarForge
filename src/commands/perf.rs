@@ -266,10 +266,7 @@ fn alert(
     let alert_dir = match direction.to_lowercase().as_str() {
         "above" => perf::AlertDirection::Above,
         "below" => perf::AlertDirection::Below,
-        _ => anyhow::bail!(
-            "Invalid direction '{}'. Use 'above' or 'below'.",
-            direction
-        ),
+        _ => anyhow::bail!("Invalid direction '{}'. Use 'above' or 'below'.", direction),
     };
 
     let msg = message.unwrap_or_else(|| {
@@ -301,7 +298,14 @@ fn report(contract: String, network: String) -> Result<()> {
     println!();
     p::kv("Contract", &report.contract_id);
     p::kv("Network", &report.network);
-    p::kv("Period", &format!("{} to {}", &report.period_start[..10], &report.period_end[..10]));
+    p::kv(
+        "Period",
+        &format!(
+            "{} to {}",
+            &report.period_start[..10],
+            &report.period_end[..10]
+        ),
+    );
 
     println!();
     p::info("Summary");

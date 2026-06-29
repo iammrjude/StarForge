@@ -81,7 +81,11 @@ pub fn handle(cmd: TemplateVcsCommands) -> Result<()> {
             message,
             author,
         } => commit(path, version, message, author),
-        TemplateVcsCommands::Branch { path, name, checkout } => branch(path, name, checkout),
+        TemplateVcsCommands::Branch {
+            path,
+            name,
+            checkout,
+        } => branch(path, name, checkout),
         TemplateVcsCommands::Log { path, limit } => log(path, limit),
         TemplateVcsCommands::Diff { path } => diff(path),
         TemplateVcsCommands::Release {
@@ -102,21 +106,13 @@ fn init(path: PathBuf, name: String) -> Result<()> {
 
     p::step(2, 2, "Creating version tracking...");
     println!();
-    p::success(&format!(
-        "Version control initialized for '{}'",
-        name
-    ));
+    p::success(&format!("Version control initialized for '{}'", name));
     p::kv("Path", &path.display().to_string());
     p::info("Use `starforge template-vcs commit` to record versions.");
     Ok(())
 }
 
-fn commit(
-    path: PathBuf,
-    version: String,
-    message: String,
-    author: Option<String>,
-) -> Result<()> {
+fn commit(path: PathBuf, version: String, message: String, author: Option<String>) -> Result<()> {
     p::header("Template Version Control — Commit");
     let author_name = author.unwrap_or_else(|| "Anonymous".to_string());
 
@@ -160,10 +156,7 @@ fn branch(path: PathBuf, name: Option<String>, checkout: Option<String>) -> Resu
         let marker = if branch.current { "* " } else { "  " };
         println!(
             "{}{} {} {}",
-            marker,
-            branch.name,
-            branch.last_commit,
-            branch.last_message
+            marker, branch.name, branch.last_commit, branch.last_message
         );
     }
     Ok(())
@@ -210,12 +203,7 @@ fn diff(path: PathBuf) -> Result<()> {
     Ok(())
 }
 
-fn release(
-    path: PathBuf,
-    version: String,
-    message: String,
-    author: Option<String>,
-) -> Result<()> {
+fn release(path: PathBuf, version: String, message: String, author: Option<String>) -> Result<()> {
     p::header("Template Version Control — Release");
     let author_name = author.unwrap_or_else(|| "Anonymous".to_string());
 
@@ -248,7 +236,10 @@ fn status(path: PathBuf) -> Result<()> {
     p::kv("Versions", &versions.versions.len().to_string());
 
     if !versions.versions.is_empty() {
-        if let Some(latest) = versions.versions.iter().max_by(|a, b| a.version.cmp(&b.version))
+        if let Some(latest) = versions
+            .versions
+            .iter()
+            .max_by(|a, b| a.version.cmp(&b.version))
         {
             p::kv("Latest", &latest.version);
         }
@@ -259,10 +250,7 @@ fn status(path: PathBuf) -> Result<()> {
 
     let diff_output = template_vcs::show_diff(&path).unwrap_or_default();
     let has_changes = !diff_output.trim().is_empty();
-    p::kv(
-        "Uncommitted",
-        if has_changes { "Yes" } else { "No" },
-    );
+    p::kv("Uncommitted", if has_changes { "Yes" } else { "No" });
 
     println!();
     p::info("Use `starforge template-vcs commit` to record changes.");

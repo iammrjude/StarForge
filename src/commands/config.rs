@@ -1,6 +1,6 @@
-use crate::utils::{config, print as p};
+use crate::utils::{config, database, print as p};
 use anyhow::Result;
-use clap::Subcommand;
+use clap::{Args, Subcommand};
 
 #[derive(Subcommand)]
 pub enum ConfigCommands {
@@ -33,6 +33,37 @@ pub enum ConfigCommands {
     },
     /// Validate configuration and check network connectivity
     Doctor,
+    /// SQLite database management (init, migrate, query, backup, export)
+    #[command(subcommand)]
+    Db(DbCommands),
+}
+
+#[derive(Subcommand)]
+pub enum DbCommands {
+    /// Initialize the SQLite database schema
+    Init,
+    /// Migrate existing TOML configuration into SQLite
+    Migrate,
+    /// Run a raw SQL SELECT query against the database
+    Query {
+        /// SQL query to execute (SELECT only)
+        sql: String,
+    },
+    /// Backup the database to a file
+    Backup {
+        /// Destination file path
+        dest: String,
+    },
+    /// Export database contents back to TOML format
+    Export {
+        /// Output file path (default: stdout)
+        #[arg(long)]
+        out: Option<String>,
+    },
+    /// Show database status and statistics
+    Status,
+    /// Run integrity check on the database
+    Check,
 }
 
 #[derive(Subcommand)]
@@ -65,7 +96,181 @@ pub fn handle(cmd: ConfigCommands) -> Result<()> {
             reset,
         } => set_encryption(mem, iterations, parallelism, reset),
         ConfigCommands::Doctor => crate::commands::doctor::run(),
+        ConfigCommands::Db(cmd) => handle_db(cmd),
     }
+}
+
+fn handle_db(cmd: DbCommands) -> Result<()> {
+    match cmd {
+        DbCommands::Init => db_init(),
+        DbCommands::Migrate => db_migrate(),
+        DbCommands::Query { sql } => db_query(&sql),
+        DbCommands::Backup { dest } => db_backup(&dest),
+        DbCommands::Export { out } => db_export(out.as_deref()),
+        DbCommands::Status => db_status(),
+        DbCommands::Check => db_check(),
+    }
+}
+
+fn db_init() -> Result<()> {
+    p::header("Database Initialization");
+    let path = database::db_path();
+    p::kv("Database path", &path.display().to_string());
+
+    let db = database::Database::open()?;
+    db.initialize()?;
+
+    p::success("SQLite database initialized successfully.");
+    p::info("Schema created: wallets, networks, config_kv, plugins, templates, meta");
+    p::info("Run `starforge config db migrate` to import your TOML configuration.");
+    Ok(())
+}
+
+fn db_migrate() -> Result<()> {
+    p::header("TOML → SQLite Migration");
+
+    let db = database::Database::open()?;
+    db.initialize()?;
+
+    let report = database::migrate_from_toml(&db)?;
+
+    p::separator();
+    p::kv("Wallets migrated", &report.wallets_migrated.to_string());
+    p::kv("Networks migrated", &report.networks_migrated.to_string());
+    p::kv(
+        "Config keys migrated",
+        &report.config_keys_migrated.to_string(),
+    );
+    p::success("Migration complete. TOML config still available for read/write.");
+    p::info("Run `starforge config db status` to verify the database contents.");
+    Ok(())
+}
+
+fn db_query(sql: &str) -> Result<()> {
+    let sql_lower = sql.trim_start().to_ascii_lowercase();
+    if !sql_lower.starts_with("select") {
+        anyhow::bail!("Only SELECT queries are allowed via `config db query` for safety.");
+    }
+
+    let db = database::Database::open()?;
+    let result = db.execute_query(sql)?;
+
+    if result.rows.is_empty() {
+        p::info("Query returned no rows.");
+        return Ok(());
+    }
+
+    let col_widths: Vec<usize> = result
+        .columns
+        .iter()
+        .enumerate()
+        .map(|(i, col)| {
+            result
+                .rows
+                .iter()
+                .map(|r| r.get(i).map(|s| s.len()).unwrap_or(0))
+                .max()
+                .unwrap_or(0)
+                .max(col.len())
+        })
+        .collect();
+
+    let header: Vec<String> = result
+        .columns
+        .iter()
+        .enumerate()
+        .map(|(i, col)| format!("{:<width$}", col, width = col_widths[i]))
+        .collect();
+    println!("  {}", header.join("  |  "));
+    println!(
+        "  {}",
+        "─".repeat(header.iter().map(|h| h.len()).sum::<usize>() + result.columns.len() * 5)
+    );
+
+    for row in &result.rows {
+        let cells: Vec<String> = row
+            .iter()
+            .enumerate()
+            .map(|(i, v)| format!("{:<width$}", v, width = col_widths[i]))
+            .collect();
+        println!("  {}", cells.join("  |  "));
+    }
+    println!();
+    p::kv("Rows", &result.rows_affected.to_string());
+    Ok(())
+}
+
+fn db_backup(dest: &str) -> Result<()> {
+    p::header("Database Backup");
+    let dest_path = std::path::Path::new(dest);
+    let db = database::Database::open()?;
+    db.backup(dest_path)?;
+    p::kv("Backup saved", dest);
+    p::success("Database backup complete.");
+    Ok(())
+}
+
+fn db_export(out: Option<&str>) -> Result<()> {
+    p::header("Database → TOML Export");
+
+    let db = database::Database::open()?;
+    let toml_str = database::export_to_toml(&db)?;
+
+    if let Some(path) = out {
+        std::fs::write(path, &toml_str)?;
+        p::kv("Exported to", path);
+        p::success("Export complete.");
+    } else {
+        println!("{}", toml_str);
+    }
+    Ok(())
+}
+
+fn db_status() -> Result<()> {
+    p::header("Database Status");
+
+    let path = database::db_path();
+    p::kv("Path", &path.display().to_string());
+    p::kv(
+        "Exists",
+        if path.exists() {
+            "yes"
+        } else {
+            "no — run `starforge config db init`"
+        },
+    );
+
+    if !path.exists() {
+        return Ok(());
+    }
+
+    let db = database::Database::open()?;
+    let stats = db.stats()?;
+
+    p::separator();
+    p::kv("Schema version", &stats.schema_version);
+    p::kv("Wallets", &stats.wallets.to_string());
+    p::kv("Networks", &stats.networks.to_string());
+    p::kv("Config entries", &stats.config_entries.to_string());
+    p::kv("Database size", &format!("{} bytes", stats.db_size_bytes));
+    p::separator();
+    Ok(())
+}
+
+fn db_check() -> Result<()> {
+    p::header("Database Integrity Check");
+
+    let db = database::Database::open()?;
+    let results = db.integrity_check()?;
+
+    for line in &results {
+        if line == "ok" {
+            p::success("Integrity check passed.");
+        } else {
+            p::warn(&format!("Issue: {}", line));
+        }
+    }
+    Ok(())
 }
 
 fn show() -> Result<()> {

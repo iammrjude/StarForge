@@ -113,7 +113,10 @@ pub struct CiArgs {
     #[arg(long, default_value = "github", value_parser = ["github", "gitlab", "circleci"])]
     pub platform: String,
     /// WASM path to embed in the snippet
-    #[arg(long, default_value = "target/wasm32-unknown-unknown/release/contract.wasm")]
+    #[arg(
+        long,
+        default_value = "target/wasm32-unknown-unknown/release/contract.wasm"
+    )]
     pub wasm: String,
     /// Contract label to embed in the snippet
     #[arg(long, default_value = "my-contract")]
@@ -178,9 +181,9 @@ pub struct VerificationReport {
 
 impl VerificationReport {
     pub fn is_critical_violation(&self) -> bool {
-        self.results.iter().any(|r| {
-            r.result == PropertyResult::Violated && r.severity == "critical"
-        })
+        self.results
+            .iter()
+            .any(|r| r.result == PropertyResult::Violated && r.severity == "critical")
     }
 }
 
@@ -254,9 +257,7 @@ fn check_property_against_wasm(
         if has_i64_add && spec_lower.contains("no_overflow") {
             return (
                 PropertyResult::Unknown,
-                Some(
-                    "Unchecked i64.add detected; manual inspection recommended".to_string(),
-                ),
+                Some("Unchecked i64.add detected; manual inspection recommended".to_string()),
             );
         }
         return (PropertyResult::Proven, None);
@@ -293,9 +294,7 @@ fn check_property_against_wasm(
     // Default: unknown — full symbolic execution would be needed
     (
         PropertyResult::Unknown,
-        Some(
-            "Property requires external solver (kani/certora); stubbed as unknown".to_string(),
-        ),
+        Some("Property requires external solver (kani/certora); stubbed as unknown".to_string()),
     )
 }
 
@@ -406,10 +405,7 @@ fn handle_harness(args: HarnessArgs) -> Result<()> {
         .filter(|p| p.contract == contract_label)
         .cloned()
         .collect();
-    p::kv(
-        "Properties found",
-        &format!("{}", contract_props.len()),
-    );
+    p::kv("Properties found", &format!("{}", contract_props.len()));
 
     p::step(3, 3, "Writing harness files…");
     if !args.out_dir.exists() {
@@ -453,11 +449,7 @@ soroban-sdk = {{ version = "22.0.0", features = ["testutils"] }}
     );
     println!(
         "  {}",
-        format!(
-            "  cd {} && cargo kani",
-            args.out_dir.display()
-        )
-        .cyan()
+        format!("  cd {} && cargo kani", args.out_dir.display()).cyan()
     );
     println!(
         "  {}",
@@ -512,11 +504,7 @@ fn handle_property_list(args: PropertyListArgs) -> Result<()> {
     let props = load_properties()?;
     let filtered: Vec<_> = props
         .iter()
-        .filter(|p| {
-            args.contract
-                .as_deref()
-                .is_none_or(|c| p.contract == c)
-        })
+        .filter(|p| args.contract.as_deref().is_none_or(|c| p.contract == c))
         .collect();
 
     if filtered.is_empty() {
@@ -568,7 +556,7 @@ fn handle_run(args: RunArgs) -> Result<()> {
     }
     let wasm_hash_str = wasm_hash(&wasm_bytes);
 
-    p::step(2, 3, "Loading properties for contract '{}'…", );
+    p::step(2, 3, "Loading properties for contract '{}'…");
     let properties = load_properties()?;
     let contract_props: Vec<_> = properties
         .iter()
@@ -584,7 +572,11 @@ fn handle_run(args: RunArgs) -> Result<()> {
         return Ok(());
     }
 
-    p::step(3, 3, &format!("Checking {} properties…", contract_props.len()));
+    p::step(
+        3,
+        3,
+        &format!("Checking {} properties…", contract_props.len()),
+    );
     println!();
 
     let mut results = Vec::new();
@@ -619,10 +611,22 @@ fn handle_run(args: RunArgs) -> Result<()> {
         });
     }
 
-    let proven = results.iter().filter(|r| r.result == PropertyResult::Proven).count();
-    let violated = results.iter().filter(|r| r.result == PropertyResult::Violated).count();
-    let unknown = results.iter().filter(|r| r.result == PropertyResult::Unknown).count();
-    let skipped = results.iter().filter(|r| r.result == PropertyResult::Skipped).count();
+    let proven = results
+        .iter()
+        .filter(|r| r.result == PropertyResult::Proven)
+        .count();
+    let violated = results
+        .iter()
+        .filter(|r| r.result == PropertyResult::Violated)
+        .count();
+    let unknown = results
+        .iter()
+        .filter(|r| r.result == PropertyResult::Unknown)
+        .count();
+    let skipped = results
+        .iter()
+        .filter(|r| r.result == PropertyResult::Skipped)
+        .count();
 
     let report = VerificationReport {
         id: format!("vr-{}", &wasm_hash_str[..12]),
@@ -654,10 +658,7 @@ fn handle_run(args: RunArgs) -> Result<()> {
         p::kv("Contract", &report.contract);
         p::kv("Total properties", &format!("{}", report.total_properties));
         p::kv("Proven", &format!("{}", report.proven));
-        p::kv(
-            "Violated",
-            &format!("{}", report.violated),
-        );
+        p::kv("Violated", &format!("{}", report.violated));
         p::kv("Unknown", &format!("{}", report.unknown));
         p::kv("Skipped", &format!("{}", report.skipped));
     }
@@ -679,8 +680,8 @@ fn handle_report(args: ReportArgs) -> Result<()> {
     let reports = load_reports()?;
     let report = reports
         .iter()
-        .filter(|r| r.contract == args.contract)
-        .last()
+        .rev()
+        .find(|r| r.contract == args.contract)
         .ok_or_else(|| {
             anyhow::anyhow!(
                 "No verification report found for contract '{}'. Run `starforge verify run` first.",
@@ -733,11 +734,7 @@ fn handle_reports(args: ReportsArgs) -> Result<()> {
     let reports = load_reports()?;
     let filtered: Vec<_> = reports
         .iter()
-        .filter(|r| {
-            args.contract
-                .as_deref()
-                .is_none_or(|c| r.contract == c)
-        })
+        .filter(|r| args.contract.as_deref().is_none_or(|c| r.contract == c))
         .collect();
 
     if filtered.is_empty() {

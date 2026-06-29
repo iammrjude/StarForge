@@ -74,7 +74,8 @@ pub fn run_contract_tests(wasm: &Path, opts: TestOptions) -> Result<TestRunResul
     let coverage = if opts.coverage {
         opts.source.as_ref().map(|src| {
             let content = fs::read_to_string(src).unwrap_or_default();
-            let executed: Vec<String> = generated_cases.iter().map(|c| c.function.clone()).collect();
+            let executed: Vec<String> =
+                generated_cases.iter().map(|c| c.function.clone()).collect();
             analyze_source_coverage(&content, &executed)
         })
     } else {
@@ -127,10 +128,7 @@ fn build_test_cases(generated: &[GeneratedTestCase]) -> Vec<String> {
 }
 
 fn run_sequential(cases: &[String]) -> Result<Vec<TestCaseResult>> {
-    Ok(cases
-        .iter()
-        .map(|name| execute_test_case(name))
-        .collect())
+    Ok(cases.iter().map(|name| execute_test_case(name)).collect())
 }
 
 fn run_parallel(cases: &[String], workers: usize) -> Result<Vec<TestCaseResult>> {
@@ -151,7 +149,9 @@ fn run_parallel(cases: &[String], workers: usize) -> Result<Vec<TestCaseResult>>
     }
 
     for handle in handles {
-        handle.join().map_err(|_| anyhow::anyhow!("Test worker panicked"))?;
+        handle
+            .join()
+            .map_err(|_| anyhow::anyhow!("Test worker panicked"))?;
     }
 
     let collected = results.lock().unwrap().clone();
@@ -190,8 +190,9 @@ fn analyze_failures(cases: &[TestCaseResult]) -> Vec<FailureAnalysis> {
                 category: category.into(),
                 suggestion: match category {
                     "authorization" => "Add require_auth() or verify caller permissions".into(),
-                    "input-validation" => "Validate inputs at function entry with explicit guards"
-                        .into(),
+                    "input-validation" => {
+                        "Validate inputs at function entry with explicit guards".into()
+                    }
                     _ => "Review test output and contract logic".into(),
                 },
             }

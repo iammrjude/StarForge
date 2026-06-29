@@ -292,21 +292,24 @@ pub fn handle(cmd: SocialCommands) -> Result<()> {
 
 fn handle_team(cmd: TeamCommands) -> Result<()> {
     let social_manager = social::SocialManager::new()?;
-    
+
     match cmd {
         TeamCommands::Create(args) => {
             let cfg = config::load()?;
-            let wallet = cfg.wallets.iter()
-                .find(|w| &w.name == &args.wallet)
+            let wallet = cfg
+                .wallets
+                .iter()
+                .find(|w| w.name == args.wallet)
                 .ok_or_else(|| anyhow::anyhow!("Wallet '{}' not found", args.wallet))?;
-            
+
             p::header("Create Team");
             p::kv("Team name", &args.name);
             p::kv("Description", &args.description);
             p::kv("Owner", &wallet.public_key);
-            
-            let team = social_manager.create_team(&args.name, &args.description, &wallet.public_key)?;
-            
+
+            let team =
+                social_manager.create_team(&args.name, &args.description, &wallet.public_key)?;
+
             p::success("Team created successfully");
             p::kv("Team ID", &team.id);
         }
@@ -319,22 +322,27 @@ fn handle_team(cmd: TeamCommands) -> Result<()> {
                 "viewer" => social::TeamRole::Viewer,
                 _ => anyhow::bail!("Invalid role. Use: owner, admin, developer, reviewer, viewer"),
             };
-            
+
             p::header("Add Team Member");
             p::kv("Team ID", &args.team_id);
             p::kv("Public key", &args.public_key);
             p::kv("Username", &args.username);
             p::kv("Role", &args.role);
-            
-            social_manager.add_team_member(&args.team_id, &args.public_key, &args.username, role)?;
-            
+
+            social_manager.add_team_member(
+                &args.team_id,
+                &args.public_key,
+                &args.username,
+                role,
+            )?;
+
             p::success("Member added successfully");
         }
         TeamCommands::List => {
             p::header("Teams");
-            
+
             let teams = social_manager.list_teams()?;
-            
+
             if teams.is_empty() {
                 p::info("No teams found");
             } else {
@@ -351,45 +359,50 @@ fn handle_team(cmd: TeamCommands) -> Result<()> {
         TeamCommands::Show(args) => {
             p::header("Team Details");
             p::kv("Team ID", &args.team_id);
-            
+
             let team = social_manager.load_team(&args.team_id)?;
-            
+
             println!();
             p::kv_accent("Name", &team.name);
             p::kv("Description", &team.description);
             p::kv("Created at", &team.created_at);
-            
+
             println!();
             p::header("Members");
             for member in &team.members {
                 println!();
                 p::kv("Username", &member.username);
                 p::kv("Public key", &member.public_key);
-                p::kv("Role", format!("{:?}", member.role));
-                p::kv("Contribution points", &member.contribution_points.to_string());
+                p::kv("Role", &format!("{:?}", member.role));
+                p::kv(
+                    "Contribution points",
+                    &member.contribution_points.to_string(),
+                );
             }
         }
     }
-    
+
     Ok(())
 }
 
 fn handle_review(cmd: ReviewCommands) -> Result<()> {
     let social_manager = social::SocialManager::new()?;
-    
+
     match cmd {
         ReviewCommands::Create(args) => {
             let cfg = config::load()?;
-            let wallet = cfg.wallets.iter()
-                .find(|w| &w.name == &args.wallet)
+            let wallet = cfg
+                .wallets
+                .iter()
+                .find(|w| w.name == args.wallet)
                 .ok_or_else(|| anyhow::anyhow!("Wallet '{}' not found", args.wallet))?;
-            
+
             p::header("Create Code Review");
             p::kv("Repository ID", &args.repository_id);
             p::kv("Contract ID", &args.contract_id);
             p::kv("Title", &args.title);
             p::kv("Required approvals", &args.required_approvals.to_string());
-            
+
             let review = social_manager.create_review(
                 &args.repository_id,
                 &args.contract_id,
@@ -398,7 +411,7 @@ fn handle_review(cmd: ReviewCommands) -> Result<()> {
                 &wallet.public_key,
                 args.required_approvals,
             )?;
-            
+
             p::success("Review created successfully");
             p::kv("Review ID", &review.id);
         }
@@ -406,7 +419,7 @@ fn handle_review(cmd: ReviewCommands) -> Result<()> {
             p::header("Add Review Comment");
             p::kv("Review ID", &args.review_id);
             p::kv("Content", &args.content);
-            
+
             social_manager.add_review_comment(
                 &args.review_id,
                 &args.wallet,
@@ -414,23 +427,23 @@ fn handle_review(cmd: ReviewCommands) -> Result<()> {
                 args.file,
                 args.line,
             )?;
-            
+
             p::success("Comment added successfully");
         }
         ReviewCommands::Approve(args) => {
             p::header("Approve Review");
             p::kv("Review ID", &args.review_id);
             p::kv("Reviewer", &args.wallet);
-            
+
             social_manager.approve_review(&args.review_id, &args.wallet)?;
-            
+
             p::success("Review approved successfully");
         }
         ReviewCommands::List(args) => {
             p::header("Code Reviews");
-            
+
             let reviews = social_manager.list_reviews(args.repository_id.as_deref())?;
-            
+
             if reviews.is_empty() {
                 p::info("No reviews found");
             } else {
@@ -438,8 +451,11 @@ fn handle_review(cmd: ReviewCommands) -> Result<()> {
                     println!();
                     p::kv_accent("Title", &review.title);
                     p::kv("ID", &review.id);
-                    p::kv("Status", format!("{:?}", review.status));
-                    p::kv("Approvals", &format!("{}/{}", review.approvals, review.required_approvals));
+                    p::kv("Status", &format!("{:?}", review.status));
+                    p::kv(
+                        "Approvals",
+                        &format!("{}/{}", review.approvals, review.required_approvals),
+                    );
                     p::kv("Comments", &review.comments.len().to_string());
                 }
             }
@@ -447,16 +463,19 @@ fn handle_review(cmd: ReviewCommands) -> Result<()> {
         ReviewCommands::Show(args) => {
             p::header("Review Details");
             p::kv("Review ID", &args.review_id);
-            
+
             let review = social_manager.load_review(&args.review_id)?;
-            
+
             println!();
             p::kv_accent("Title", &review.title);
             p::kv("Description", &review.description);
-            p::kv("Status", format!("{:?}", review.status));
+            p::kv("Status", &format!("{:?}", review.status));
             p::kv("Author", &review.author);
-            p::kv("Approvals", &format!("{}/{}", review.approvals, review.required_approvals));
-            
+            p::kv(
+                "Approvals",
+                &format!("{}/{}", review.approvals, review.required_approvals),
+            );
+
             println!();
             p::header("Comments");
             for comment in &review.comments {
@@ -472,32 +491,34 @@ fn handle_review(cmd: ReviewCommands) -> Result<()> {
             }
         }
     }
-    
+
     Ok(())
 }
 
 fn handle_share(cmd: ShareCommands) -> Result<()> {
     let social_manager = social::SocialManager::new()?;
-    
+
     match cmd {
         ShareCommands::Share(args) => {
             let cfg = config::load()?;
-            let wallet = cfg.wallets.iter()
-                .find(|w| &w.name == &args.wallet)
+            let wallet = cfg
+                .wallets
+                .iter()
+                .find(|w| w.name == args.wallet)
                 .ok_or_else(|| anyhow::anyhow!("Wallet '{}' not found", args.wallet))?;
-            
+
             let permission = match args.permission.to_lowercase().as_str() {
                 "read" => social::SharePermission::Read,
                 "write" => social::SharePermission::Write,
                 "admin" => social::SharePermission::Admin,
                 _ => anyhow::bail!("Invalid permission. Use: read, write, admin"),
             };
-            
+
             p::header("Share Contract");
             p::kv("Contract ID", &args.contract_id);
             p::kv("Shared with", &args.shared_with);
             p::kv("Permission", &args.permission);
-            
+
             let shared = social_manager.share_contract(
                 &args.contract_id,
                 &wallet.public_key,
@@ -505,13 +526,13 @@ fn handle_share(cmd: ShareCommands) -> Result<()> {
                 permission,
                 args.expires_at,
             )?;
-            
+
             p::success("Contract shared successfully");
             p::kv("Share ID", &shared.id);
         }
         ShareCommands::List(args) => {
             p::header("Shared Contracts");
-            
+
             let public_key = if let Some(pk) = args.public_key {
                 pk
             } else {
@@ -522,9 +543,9 @@ fn handle_share(cmd: ShareCommands) -> Result<()> {
                     anyhow::bail!("No wallet found. Specify --public-key");
                 }
             };
-            
+
             let shared = social_manager.list_shared_contracts(&public_key)?;
-            
+
             if shared.is_empty() {
                 p::info("No shared contracts found");
             } else {
@@ -533,35 +554,38 @@ fn handle_share(cmd: ShareCommands) -> Result<()> {
                     p::kv_accent("Contract ID", &share.contract_id);
                     p::kv("Shared by", &share.shared_by);
                     p::kv("Shared with", &share.shared_with);
-                    p::kv("Permission", format!("{:?}", share.permission));
+                    p::kv("Permission", &format!("{:?}", share.permission));
                     p::kv("Shared at", &share.created_at);
                 }
             }
         }
     }
-    
+
     Ok(())
 }
 
 fn handle_discussion(cmd: DiscussionCommands) -> Result<()> {
     let social_manager = social::SocialManager::new()?;
-    
+
     match cmd {
         DiscussionCommands::Create(args) => {
             let cfg = config::load()?;
-            let wallet = cfg.wallets.iter()
-                .find(|w| &w.name == &args.wallet)
+            let wallet = cfg
+                .wallets
+                .iter()
+                .find(|w| w.name == args.wallet)
                 .ok_or_else(|| anyhow::anyhow!("Wallet '{}' not found", args.wallet))?;
-            
-            let tags = args.tags
+
+            let tags: Vec<String> = args
+                .tags
                 .map(|t| t.split(',').map(|s| s.trim().to_string()).collect())
                 .unwrap_or_default();
-            
+
             p::header("Create Discussion");
             p::kv("Contract ID", &args.contract_id);
             p::kv("Title", &args.title);
             p::kv("Tags", &tags.join(", "));
-            
+
             let discussion = social_manager.create_discussion(
                 &args.contract_id,
                 &args.title,
@@ -569,7 +593,7 @@ fn handle_discussion(cmd: DiscussionCommands) -> Result<()> {
                 &wallet.public_key,
                 tags,
             )?;
-            
+
             p::success("Discussion created successfully");
             p::kv("Discussion ID", &discussion.id);
         }
@@ -577,25 +601,29 @@ fn handle_discussion(cmd: DiscussionCommands) -> Result<()> {
             p::header("Reply to Discussion");
             p::kv("Discussion ID", &args.discussion_id);
             p::kv("Content", &args.content);
-            
-            social_manager.add_discussion_reply(&args.discussion_id, &args.wallet, &args.content)?;
-            
+
+            social_manager.add_discussion_reply(
+                &args.discussion_id,
+                &args.wallet,
+                &args.content,
+            )?;
+
             p::success("Reply added successfully");
         }
         DiscussionCommands::Vote(args) => {
             p::header("Vote on Discussion");
             p::kv("Discussion ID", &args.discussion_id);
             p::kv("Vote", if args.upvote { "Upvote" } else { "Downvote" });
-            
+
             social_manager.vote_discussion(&args.discussion_id, args.upvote)?;
-            
+
             p::success("Vote recorded successfully");
         }
         DiscussionCommands::List(args) => {
             p::header("Discussions");
-            
+
             let discussions = social_manager.list_discussions(args.contract_id.as_deref())?;
-            
+
             if discussions.is_empty() {
                 p::info("No discussions found");
             } else {
@@ -605,23 +633,29 @@ fn handle_discussion(cmd: DiscussionCommands) -> Result<()> {
                     p::kv("ID", &discussion.id);
                     p::kv("Author", &discussion.author);
                     p::kv("Replies", &discussion.replies.len().to_string());
-                    p::kv("Votes", &format!("+{}/-{}", discussion.upvotes, discussion.downvotes));
+                    p::kv(
+                        "Votes",
+                        &format!("+{}/-{}", discussion.upvotes, discussion.downvotes),
+                    );
                 }
             }
         }
         DiscussionCommands::Show(args) => {
             p::header("Discussion Details");
             p::kv("Discussion ID", &args.discussion_id);
-            
+
             let discussion = social_manager.load_discussion(&args.discussion_id)?;
-            
+
             println!();
             p::kv_accent("Title", &discussion.title);
             p::kv("Content", &discussion.content);
             p::kv("Author", &discussion.author);
             p::kv("Tags", &discussion.tags.join(", "));
-            p::kv("Votes", &format!("+{}/-{}", discussion.upvotes, discussion.downvotes));
-            
+            p::kv(
+                "Votes",
+                &format!("+{}/-{}", discussion.upvotes, discussion.downvotes),
+            );
+
             println!();
             p::header("Replies");
             for reply in &discussion.replies {
@@ -632,20 +666,22 @@ fn handle_discussion(cmd: DiscussionCommands) -> Result<()> {
             }
         }
     }
-    
+
     Ok(())
 }
 
 fn handle_contribution(cmd: ContributionCommands) -> Result<()> {
     let social_manager = social::SocialManager::new()?;
-    
+
     match cmd {
         ContributionCommands::Record(args) => {
             let cfg = config::load()?;
-            let wallet = cfg.wallets.iter()
-                .find(|w| &w.name == &args.wallet)
+            let wallet = cfg
+                .wallets
+                .iter()
+                .find(|w| w.name == args.wallet)
                 .ok_or_else(|| anyhow::anyhow!("Wallet '{}' not found", args.wallet))?;
-            
+
             let contribution_type = match args.contribution_type.to_lowercase().as_str() {
                 "code_commit" => social::ContributionType::CodeCommit,
                 "code_review" => social::ContributionType::CodeReview,
@@ -655,13 +691,13 @@ fn handle_contribution(cmd: ContributionCommands) -> Result<()> {
                 "test_coverage" => social::ContributionType::TestCoverage,
                 _ => anyhow::bail!("Invalid contribution type. Use: code_commit, code_review, bug_fix, feature_addition, documentation, test_coverage"),
             };
-            
+
             p::header("Record Contribution");
             p::kv("Contributor", &wallet.public_key);
             p::kv("Contract ID", &args.contract_id);
             p::kv("Type", &args.contribution_type);
             p::kv("Points", &args.points.to_string());
-            
+
             social_manager.record_contribution(
                 &wallet.public_key,
                 &args.contract_id,
@@ -669,14 +705,14 @@ fn handle_contribution(cmd: ContributionCommands) -> Result<()> {
                 &args.description,
                 args.points,
             )?;
-            
+
             p::success("Contribution recorded successfully");
         }
         ContributionCommands::List(args) => {
             p::header("Contributions");
-            
+
             let contributions = social_manager.get_contributions(args.contributor.as_deref())?;
-            
+
             if contributions.is_empty() {
                 p::info("No contributions found");
             } else {
@@ -684,7 +720,7 @@ fn handle_contribution(cmd: ContributionCommands) -> Result<()> {
                     println!();
                     p::kv_accent("Contributor", &contribution.contributor);
                     p::kv("Contract ID", &contribution.contract_id);
-                    p::kv("Type", format!("{:?}", contribution.contribution_type));
+                    p::kv("Type", &format!("{:?}", contribution.contribution_type));
                     p::kv("Description", &contribution.description);
                     p::kv("Points", &contribution.points.to_string());
                 }
@@ -693,14 +729,14 @@ fn handle_contribution(cmd: ContributionCommands) -> Result<()> {
         ContributionCommands::Show(args) => {
             p::header("Reputation");
             p::kv("Identifier", &args.identifier);
-            
+
             let reputation = social_manager.get_reputation(&args.identifier)?;
-            
+
             println!();
             p::kv_accent("Username", &reputation.username);
             p::kv("Total points", &reputation.total_points.to_string());
-            p::kv("Rank", format!("{:?}", reputation.rank));
-            
+            p::kv("Rank", &format!("{:?}", reputation.rank));
+
             println!();
             p::header("Badges");
             for badge in &reputation.badges {
@@ -711,18 +747,18 @@ fn handle_contribution(cmd: ContributionCommands) -> Result<()> {
             }
         }
     }
-    
+
     Ok(())
 }
 
 fn handle_leaderboard(args: LeaderboardArgs) -> Result<()> {
     let social_manager = social::SocialManager::new()?;
-    
+
     p::header("Reputation Leaderboard");
     p::kv("Top", &args.limit.to_string());
-    
+
     let leaderboard = social_manager.get_leaderboard(args.limit)?;
-    
+
     if leaderboard.is_empty() {
         p::info("No reputation data found");
     } else {
@@ -730,11 +766,11 @@ fn handle_leaderboard(args: LeaderboardArgs) -> Result<()> {
         for (i, reputation) in leaderboard.iter().enumerate() {
             p::kv_accent(&format!("#{}", i + 1), &reputation.username);
             p::kv("Points", &reputation.total_points.to_string());
-            p::kv("Rank", format!("{:?}", reputation.rank));
+            p::kv("Rank", &format!("{:?}", reputation.rank));
             p::kv("Badges", &reputation.badges.len().to_string());
             println!();
         }
     }
-    
+
     Ok(())
 }

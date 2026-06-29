@@ -410,7 +410,10 @@ fn handle_send(args: SendArgs) -> Result<()> {
     );
     p::kv(
         "Transaction XDR",
-        &format!("{}...", &tx_result.transaction_xdr[..tx_result.transaction_xdr.len().min(20)]),
+        &format!(
+            "{}...",
+            &tx_result.transaction_xdr[..tx_result.transaction_xdr.len().min(20)]
+        ),
     );
 
     // Build operation summary for confirmation

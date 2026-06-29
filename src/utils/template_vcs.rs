@@ -91,7 +91,10 @@ pub fn commit_version(
     let tag = format!("v{}", version);
 
     if versions.versions.iter().any(|v| v.version == version) {
-        anyhow::bail!("Version '{}' already exists. Bump the version number.", version);
+        anyhow::bail!(
+            "Version '{}' already exists. Bump the version number.",
+            version
+        );
     }
 
     let all_changes: Vec<String> = message
@@ -110,9 +113,7 @@ pub fn commit_version(
     };
 
     versions.versions.push(entry.clone());
-    versions
-        .versions
-        .sort_by(|a, b| b.version.cmp(&a.version));
+    versions.versions.sort_by(|a, b| b.version.cmp(&a.version));
 
     fs::write(
         versions_file(template_path),
@@ -168,9 +169,7 @@ pub fn commit_version(
 
 pub fn list_branches(template_path: &Path) -> Result<Vec<TemplateBranch>> {
     if !is_git_repo(template_path) {
-        anyhow::bail!(
-            "Not a git repository. Run `starforge template vcs init` first."
-        );
+        anyhow::bail!("Not a git repository. Run `starforge template vcs init` first.");
     }
 
     let output = Command::new("git")
@@ -219,9 +218,7 @@ pub fn list_branches(template_path: &Path) -> Result<Vec<TemplateBranch>> {
 
 pub fn create_branch(template_path: &Path, branch_name: &str) -> Result<()> {
     if !is_git_repo(template_path) {
-        anyhow::bail!(
-            "Not a git repository. Run `starforge template vcs init` first."
-        );
+        anyhow::bail!("Not a git repository. Run `starforge template vcs init` first.");
     }
 
     let output = Command::new("git")
@@ -242,9 +239,7 @@ pub fn create_branch(template_path: &Path, branch_name: &str) -> Result<()> {
 
 pub fn switch_branch(template_path: &Path, branch_name: &str) -> Result<()> {
     if !is_git_repo(template_path) {
-        anyhow::bail!(
-            "Not a git repository. Run `starforge template vcs init` first."
-        );
+        anyhow::bail!("Not a git repository. Run `starforge template vcs init` first.");
     }
 
     let output = Command::new("git")
@@ -272,9 +267,7 @@ pub fn view_log(template_path: &Path, limit: usize) -> Result<Vec<TemplateVersio
 
 pub fn show_diff(template_path: &Path) -> Result<String> {
     if !is_git_repo(template_path) {
-        anyhow::bail!(
-            "Not a git repository. Run `starforge template vcs init` first."
-        );
+        anyhow::bail!("Not a git repository. Run `starforge template vcs init` first.");
     }
 
     let output = Command::new("git")
@@ -294,7 +287,12 @@ pub fn show_diff(template_path: &Path) -> Result<String> {
     Ok(stdout)
 }
 
-pub fn create_release(template_path: &Path, version: &str, message: &str, author: &str) -> Result<TemplateVersion> {
+pub fn create_release(
+    template_path: &Path,
+    version: &str,
+    message: &str,
+    author: &str,
+) -> Result<TemplateVersion> {
     commit_version(template_path, version, message, author)
 }
 
@@ -305,7 +303,11 @@ pub fn generate_changelog(template_path: &Path) -> Result<String> {
     output.push_str(&format!("# Changelog — {}\n\n", versions.template_name));
 
     for version in &versions.versions {
-        output.push_str(&format!("## {} ({})\n\n", version.tag, &version.timestamp[..10]));
+        output.push_str(&format!(
+            "## {} ({})\n\n",
+            version.tag,
+            &version.timestamp[..10]
+        ));
         output.push_str(&format!("**Author:** {}\n\n", version.author));
 
         if !version.changes.is_empty() {

@@ -124,7 +124,11 @@ impl AnomalyAggregator {
     }
 
     pub fn top_contracts(&self, limit: usize) -> Vec<(String, u32)> {
-        let mut entries: Vec<_> = self.by_contract.iter().map(|(k, v)| (k.clone(), *v)).collect();
+        let mut entries: Vec<_> = self
+            .by_contract
+            .iter()
+            .map(|(k, v)| (k.clone(), *v))
+            .collect();
         entries.sort_by(|a, b| b.1.cmp(&a.1));
         entries.truncate(limit);
         entries

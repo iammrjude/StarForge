@@ -56,6 +56,9 @@ enum Commands {
     Inspect(commands::inspect::InspectCommands),
     /// Deploy a compiled Soroban contract (.wasm)
     Deploy(commands::deploy::DeployArgs),
+    /// Deployment history, rollback, verification, and dashboard
+    #[command(subcommand)]
+    Deployments(commands::deployments::DeploymentsCommands),
     /// Show starforge config and environment info
     Info,
     /// Manage starforge configuration (telemetry, network)
@@ -168,6 +171,7 @@ fn main() {
         Commands::Contract(_) => "contract",
         Commands::Inspect(_) => "inspect",
         Commands::Deploy(_) => "deploy",
+        Commands::Deployments(_) => "deployments",
         Commands::Info => "info",
         Commands::Config(_) => "config",
         Commands::Telemetry(_) => "telemetry",
@@ -204,6 +208,7 @@ fn main() {
         Commands::Contract(cmd) => commands::contract::handle(cmd),
         Commands::Inspect(cmd) => commands::inspect::handle(cmd),
         Commands::Deploy(args) => commands::deploy::handle(args),
+        Commands::Deployments(cmd) => commands::deployments::handle(cmd),
         Commands::Info => commands::info::handle(),
         Commands::Config(cmd) => commands::config::handle(cmd),
         Commands::Telemetry(cmd) => commands::telemetry::handle(cmd),

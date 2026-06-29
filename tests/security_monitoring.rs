@@ -1,8 +1,8 @@
+use serde_json::json;
 use starforge::utils::security::{
-    anomaly::AnomalyDetector, evaluate_event, default_rules, threat_intel::ThreatFeed,
+    anomaly::AnomalyDetector, default_rules, evaluate_event, threat_intel::ThreatFeed,
     IncidentStore,
 };
-use serde_json::json;
 use tempfile::TempDir;
 
 #[test]

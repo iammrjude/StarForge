@@ -90,7 +90,10 @@ fn render_html(report: &HardeningReport) -> String {
         .map(|f| {
             format!(
                 "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>",
-                f.pattern_id, f.severity, f.line, html_escape(&f.message)
+                f.pattern_id,
+                f.severity,
+                f.line,
+                html_escape(&f.message)
             )
         })
         .collect();

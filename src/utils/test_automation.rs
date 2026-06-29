@@ -114,47 +114,52 @@ impl TestCaseGenerator {
     }
 
     pub fn generate_from_contract(&self) -> Result<TestSuite> {
-        let wasm_path = self.contract_path.join("target/wasm32-unknown-unknown/release");
-        
+        let wasm_path = self
+            .contract_path
+            .join("target/wasm32-unknown-unknown/release");
+
         // Read contract source files
         let src_files = self.find_contract_source_files()?;
-        
+
         let mut test_cases = Vec::new();
-        
+
         for src_file in &src_files {
             let file_tests = self.generate_tests_from_file(src_file)?;
             test_cases.extend(file_tests);
         }
-        
+
         Ok(TestSuite {
-            name: format!("{}_suite", self.contract_path.file_name().unwrap().to_string_lossy()),
+            name: format!(
+                "{}_suite",
+                self.contract_path.file_name().unwrap().to_string_lossy()
+            ),
             contract_id: "generated".to_string(),
             test_cases,
             generated_at: chrono::Utc::now().to_rfc3339(),
         })
     }
-    
+
     fn find_contract_source_files(&self) -> Result<Vec<PathBuf>> {
         let src_dir = self.contract_path.join("src");
         let mut files = Vec::new();
-        
+
         if src_dir.exists() {
             for entry in fs::read_dir(&src_dir)? {
                 let entry = entry?;
                 let path = entry.path();
-                if path.extension().map_or(false, |ext| ext == "rs") {
+                if path.extension().is_some_and(|ext| ext == "rs") {
                     files.push(path);
                 }
             }
         }
-        
+
         Ok(files)
     }
-    
+
     fn generate_tests_from_file(&self, file_path: &Path) -> Result<Vec<TestCase>> {
         let content = fs::read_to_string(file_path)?;
         let mut tests = Vec::new();
-        
+
         // Parse function signatures
         for (line_num, line) in content.lines().enumerate() {
             if line.trim_start().starts_with("pub fn ") {
@@ -162,18 +167,23 @@ impl TestCaseGenerator {
                 tests.push(test);
             }
         }
-        
+
         Ok(tests)
     }
-    
-    fn generate_test_from_function(&self, line: &str, line_num: usize, file_path: &Path) -> Result<TestCase> {
+
+    fn generate_test_from_function(
+        &self,
+        line: &str,
+        line_num: usize,
+        file_path: &Path,
+    ) -> Result<TestCase> {
         let function_name = line
             .trim_start()
             .strip_prefix("pub fn ")
             .and_then(|s| s.split('(').next())
             .unwrap_or("unknown")
             .to_string();
-        
+
         Ok(TestCase {
             id: format!("test_{}_{}", line_num, function_name),
             name: format!("Test {}", function_name),
@@ -195,20 +205,20 @@ impl ParallelTestRunner {
     pub fn new(max_workers: usize) -> Self {
         Self { max_workers }
     }
-    
+
     pub fn run_tests(&self, suite: &TestSuite, wasm_path: &Path) -> Result<TestReport> {
         let start = Instant::now();
         let results = Arc::new(Mutex::new(Vec::new()));
         let test_cases = Arc::new(suite.test_cases.clone());
         let wasm_path = Arc::new(wasm_path.to_path_buf());
-        
+
         let mut handles = Vec::new();
-        
+
         for chunk in test_cases.chunks((test_cases.len() / self.max_workers).max(1)) {
             let chunk_tests = chunk.to_vec();
             let results_clone = Arc::clone(&results);
             let wasm_clone = Arc::clone(&wasm_path);
-            
+
             let handle = thread::spawn(move || {
                 for test in chunk_tests {
                     let result = Self::run_single_test(&test, &wasm_clone);
@@ -216,39 +226,42 @@ impl ParallelTestRunner {
                     results.push(result);
                 }
             });
-            
+
             handles.push(handle);
         }
-        
+
         for handle in handles {
-            handle.join().map_err(|e| anyhow::anyhow!("Thread panic: {:?}", e))?;
+            handle
+                .join()
+                .map_err(|e| anyhow::anyhow!("Thread panic: {:?}", e))?;
         }
-        
+
         let results = Arc::try_unwrap(results).unwrap().into_inner()?;
         let duration = start.elapsed();
-        
+
         self.generate_report(suite, results, duration)
     }
-    
+
     fn run_single_test(test: &TestCase, wasm_path: &Path) -> TestResult {
         let start = Instant::now();
-        
+
         // Simulate test execution
-        let status = if test.function_name.contains("error") || test.function_name.contains("fail") {
+        let failed = test.function_name.contains("error") || test.function_name.contains("fail");
+        let status = if failed {
             TestStatus::Failed
         } else {
             TestStatus::Passed
         };
-        
+
         let duration = start.elapsed();
-        
+
         TestResult {
             test_id: test.id.clone(),
             test_name: test.name.clone(),
             status,
             duration_ms: duration.as_millis() as u64,
             output: Some("Test executed successfully".to_string()),
-            error: if matches!(status, TestStatus::Failed | TestStatus::Error) {
+            error: if failed {
                 Some("Test assertion failed".to_string())
             } else {
                 None
@@ -263,16 +276,33 @@ impl ParallelTestRunner {
             }),
         }
     }
-    
-    fn generate_report(&self, suite: &TestSuite, results: Vec<TestResult>, duration: std::time::Duration) -> Result<TestReport> {
-        let passed = results.iter().filter(|r| matches!(r.status, TestStatus::Passed)).count() as u32;
-        let failed = results.iter().filter(|r| matches!(r.status, TestStatus::Failed)).count() as u32;
-        let skipped = results.iter().filter(|r| matches!(r.status, TestStatus::Skipped)).count() as u32;
-        let errors = results.iter().filter(|r| matches!(r.status, TestStatus::Error)).count() as u32;
-        
+
+    fn generate_report(
+        &self,
+        suite: &TestSuite,
+        results: Vec<TestResult>,
+        duration: std::time::Duration,
+    ) -> Result<TestReport> {
+        let passed = results
+            .iter()
+            .filter(|r| matches!(r.status, TestStatus::Passed))
+            .count() as u32;
+        let failed = results
+            .iter()
+            .filter(|r| matches!(r.status, TestStatus::Failed))
+            .count() as u32;
+        let skipped = results
+            .iter()
+            .filter(|r| matches!(r.status, TestStatus::Skipped))
+            .count() as u32;
+        let errors = results
+            .iter()
+            .filter(|r| matches!(r.status, TestStatus::Error))
+            .count() as u32;
+
         let coverage_summary = self.calculate_coverage_summary(&results);
         let failure_analysis = self.analyze_failures(&results);
-        
+
         Ok(TestReport {
             suite_name: suite.name.clone(),
             contract_id: suite.contract_id.clone(),
@@ -288,7 +318,7 @@ impl ParallelTestRunner {
             generated_at: chrono::Utc::now().to_rfc3339(),
         })
     }
-    
+
     fn calculate_coverage_summary(&self, results: &[TestResult]) -> CoverageData {
         let mut total_lines = 0u32;
         let mut covered_lines = 0u32;
@@ -296,7 +326,7 @@ impl ParallelTestRunner {
         let mut covered_functions = 0u32;
         let mut total_branches = 0u32;
         let mut covered_branches = 0u32;
-        
+
         for result in results {
             if let Some(coverage) = &result.coverage_data {
                 total_lines += coverage.lines_total;
@@ -307,7 +337,7 @@ impl ParallelTestRunner {
                 covered_branches += coverage.branches_covered;
             }
         }
-        
+
         CoverageData {
             lines_covered: covered_lines,
             lines_total: total_lines,
@@ -317,7 +347,7 @@ impl ParallelTestRunner {
             branches_total: total_branches,
         }
     }
-    
+
     fn analyze_failures(&self, results: &[TestResult]) -> Vec<FailureAnalysis> {
         results
             .iter()
@@ -326,7 +356,10 @@ impl ParallelTestRunner {
                 test_id: r.test_id.clone(),
                 test_name: r.test_name.clone(),
                 error_type: "AssertionError".to_string(),
-                error_message: r.error.clone().unwrap_or_else(|| "Unknown error".to_string()),
+                error_message: r
+                    .error
+                    .clone()
+                    .unwrap_or_else(|| "Unknown error".to_string()),
                 suggested_fix: Some("Review test expectations and contract logic".to_string()),
                 related_tests: vec![],
             })
@@ -338,30 +371,34 @@ pub struct TestReportExporter;
 
 impl TestReportExporter {
     pub fn export_html(report: &TestReport, output_path: &Path) -> Result<()> {
-        let html = self.generate_html_report(report)?;
+        let exporter = TestReportExporter;
+        let html = exporter.generate_html_report(report)?;
         fs::write(output_path, html)?;
         Ok(())
     }
-    
+
     pub fn export_json(report: &TestReport, output_path: &Path) -> Result<()> {
         let json = serde_json::to_string_pretty(report)?;
         fs::write(output_path, json)?;
         Ok(())
     }
-    
+
     pub fn export_junit(report: &TestReport, output_path: &Path) -> Result<()> {
-        let xml = self.generate_junit_xml(report)?;
+        let exporter = TestReportExporter;
+        let xml = exporter.generate_junit_xml(report);
         fs::write(output_path, xml)?;
         Ok(())
     }
-    
+
     fn generate_html_report(&self, report: &TestReport) -> Result<String> {
         let coverage_pct = if report.coverage_summary.lines_total > 0 {
-            (report.coverage_summary.lines_covered as f64 / report.coverage_summary.lines_total as f64 * 100.0) as u32
+            (report.coverage_summary.lines_covered as f64
+                / report.coverage_summary.lines_total as f64
+                * 100.0) as u32
         } else {
             0
         };
-        
+
         Ok(format!(
             r#"<!DOCTYPE html>
 <html>
@@ -447,15 +484,20 @@ impl TestReportExporter {
             self.generate_failure_rows(report)
         ))
     }
-    
+
     fn generate_test_rows(&self, report: &TestReport) -> String {
-        report.results
+        report
+            .results
             .iter()
             .map(|r| {
                 format!(
                     "<tr><td>{}</td><td class=\"{}\">{:?}</td><td>{}ms</td><td>{}</td></tr>",
                     r.test_name,
-                    if matches!(r.status, TestStatus::Passed) { "passed" } else { "failed" },
+                    if matches!(r.status, TestStatus::Passed) {
+                        "passed"
+                    } else {
+                        "failed"
+                    },
                     r.status,
                     r.duration_ms,
                     r.error.as_deref().unwrap_or("")
@@ -464,9 +506,10 @@ impl TestReportExporter {
             .collect::<Vec<_>>()
             .join("\n        ")
     }
-    
+
     fn generate_failure_rows(&self, report: &TestReport) -> String {
-        report.failure_analysis
+        report
+            .failure_analysis
             .iter()
             .map(|f| {
                 format!(
@@ -480,7 +523,7 @@ impl TestReportExporter {
             .collect::<Vec<_>>()
             .join("\n        ")
     }
-    
+
     fn generate_junit_xml(&self, report: &TestReport) -> String {
         let mut xml = format!(
             r#"<?xml version="1.0" encoding="UTF-8"?>
@@ -493,7 +536,7 @@ impl TestReportExporter {
             report.errors,
             report.total_duration_ms as f64 / 1000.0
         );
-        
+
         for result in &report.results {
             xml.push_str(&format!(
                 r#"        <testcase name="{}" time="{}">
@@ -501,7 +544,7 @@ impl TestReportExporter {
                 result.test_name,
                 result.duration_ms as f64 / 1000.0
             ));
-            
+
             if matches!(result.status, TestStatus::Failed) {
                 xml.push_str(&format!(
                     r#"            <failure message="{}">{}</failure>
@@ -510,10 +553,10 @@ impl TestReportExporter {
                     result.error.as_deref().unwrap_or("")
                 ));
             }
-            
+
             xml.push_str("        </testcase>\n");
         }
-        
+
         xml.push_str("    </testsuite>\n</testsuites>");
         xml
     }

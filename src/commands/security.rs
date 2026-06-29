@@ -1,8 +1,8 @@
 use crate::utils::print as p;
 use crate::utils::security::{
-    apply_hardening, generate_hardening_report, run_checklist, validate_security, write_report,
-    AnomalyDetector, HardeningOptions, IncidentResponse, IncidentStore, ThreatFeed,
-    evaluate_event, default_rules,
+    apply_hardening, default_rules, evaluate_event, format_report, generate_hardening_report,
+    run_audit, run_checklist, validate_security, write_report, AnomalyDetector, AuditConfig,
+    HardeningOptions, IncidentResponse, IncidentStore, ThreatFeed,
 };
 use crate::utils::stream::{EventStreamFilters, SorobanEventStream};
 use crate::utils::{config, notifications, soroban};
@@ -29,6 +29,29 @@ pub enum SecurityCommands {
     Monitor(SecurityMonitorArgs),
     /// Manage security incidents
     Incident(IncidentArgs),
+    /// Run full security audit with external tools (Slither, Mythril) and built-in analysis
+    Audit(AuditArgs),
+}
+
+#[derive(Args)]
+pub struct AuditArgs {
+    /// Path to Soroban contract source (.rs)
+    pub path: PathBuf,
+    /// Run Slither if installed
+    #[arg(long, default_value = "true")]
+    pub slither: bool,
+    /// Run Mythril if installed
+    #[arg(long, default_value = "true")]
+    pub mythril: bool,
+    /// Output format: text or json
+    #[arg(long, default_value = "text")]
+    pub format: String,
+    /// Save report to file instead of stdout
+    #[arg(long)]
+    pub out: Option<PathBuf>,
+    /// CI mode: exit non-zero if score is below threshold (0-100)
+    #[arg(long)]
+    pub min_score: Option<f64>,
 }
 
 #[derive(Args)]
@@ -77,7 +100,10 @@ pub struct SecurityMonitorArgs {
 #[derive(Subcommand)]
 pub enum IncidentCommands {
     List,
-    Ack { #[arg(long)] id: String },
+    Ack {
+        #[arg(long)]
+        id: String,
+    },
 }
 
 #[derive(Args)]
@@ -94,6 +120,7 @@ pub fn handle(cmd: SecurityCommands) -> Result<()> {
         SecurityCommands::Report(args) => handle_report(args),
         SecurityCommands::Monitor(args) => handle_monitor(args),
         SecurityCommands::Incident(args) => handle_incident(args),
+        SecurityCommands::Audit(args) => handle_audit(args),
     }
 }
 
@@ -184,7 +211,10 @@ fn handle_report(args: ReportArgs) -> Result<()> {
     let path = write_report(&report, &args.format)?;
 
     p::kv("Report", &path.display().to_string());
-    p::kv("Security score", &format!("{:.1}%", report.summary.security_score));
+    p::kv(
+        "Security score",
+        &format!("{:.1}%", report.summary.security_score),
+    );
     p::success("Hardening report generated");
     Ok(())
 }
@@ -288,10 +318,99 @@ fn handle_incident(args: IncidentArgs) -> Result<()> {
             Ok(())
         }
         IncidentCommands::Ack { id } => {
-            let updated =
-                IncidentStore::update_status(&id, crate::utils::security::IncidentStatus::Acknowledged)?;
+            let updated = IncidentStore::update_status(
+                &id,
+                crate::utils::security::IncidentStatus::Acknowledged,
+            )?;
             p::success(&format!("Incident {} acknowledged", updated.id));
             Ok(())
         }
     }
+}
+
+fn handle_audit(args: AuditArgs) -> Result<()> {
+    config::validate_file_path(&args.path, Some("rs"))?;
+    p::header("Contract Security Audit");
+    p::kv("Contract", &args.path.display().to_string());
+
+    let cfg = AuditConfig {
+        run_slither: args.slither,
+        run_mythril: args.mythril,
+    };
+
+    let result = run_audit(&args.path, &cfg)?;
+
+    let score_label = match result.score as u32 {
+        90..=100 => "Excellent",
+        70..=89 => "Good",
+        50..=69 => "Fair",
+        _ => "Poor",
+    };
+
+    p::separator();
+    p::kv("Tools used", &result.tools_used.join(", "));
+    p::kv(
+        "Security score",
+        &format!("{:.1}/100  ({})", result.score, score_label),
+    );
+    p::kv("Critical", &result.summary.critical.to_string());
+    p::kv("High    ", &result.summary.high.to_string());
+    p::kv("Medium  ", &result.summary.medium.to_string());
+    p::kv("Low     ", &result.summary.low.to_string());
+    p::kv("Info    ", &result.summary.info.to_string());
+
+    if !result.findings.is_empty() {
+        println!();
+        p::header("Findings");
+        for (i, f) in result.findings.iter().enumerate() {
+            println!(
+                "  {}. [{}] {}  ({})",
+                i + 1,
+                f.severity.to_uppercase(),
+                f.title,
+                f.tool
+            );
+            println!("     {}", f.description);
+            println!("     Remediation: {}", f.remediation);
+            if let Some(loc) = &f.location {
+                println!("     Location: {}", loc);
+            }
+            println!();
+        }
+    } else {
+        println!();
+        p::success("No security issues found.");
+    }
+
+    match args.format.as_str() {
+        "json" => {
+            let json = serde_json::to_string_pretty(&result)?;
+            if let Some(out) = &args.out {
+                fs::write(out, &json)?;
+                p::kv("Report saved", &out.display().to_string());
+            } else {
+                println!("{}", json);
+            }
+        }
+        _ => {
+            if let Some(out) = &args.out {
+                let text = format_report(&result);
+                fs::write(out, &text)?;
+                p::kv("Report saved", &out.display().to_string());
+            }
+        }
+    }
+
+    if let Some(min) = args.min_score {
+        if result.score < min {
+            anyhow::bail!(
+                "Security score {:.1} is below required minimum {:.1}",
+                result.score,
+                min
+            );
+        }
+    }
+
+    p::success("Security audit complete");
+    Ok(())
 }

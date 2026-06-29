@@ -1,5 +1,6 @@
 use crate::utils::{print as p, registry, templates};
 use anyhow::Result;
+use base64::Engine as _;
 use clap::Subcommand;
 use std::path::PathBuf;
 
@@ -130,7 +131,15 @@ pub fn handle(cmd: RegistryCommands) -> Result<()> {
             repository,
             homepage,
         } => publish(
-            path, name, description, author, tags, version, license, repository, homepage,
+            path,
+            name,
+            description,
+            author,
+            tags,
+            version,
+            license,
+            repository,
+            homepage,
         ),
         RegistryCommands::Install { name, version } => install(name, version),
         RegistryCommands::Review {
@@ -150,14 +159,16 @@ fn search(
     min_quality: Option<u8>,
     limit: u32,
 ) -> Result<()> {
-    p::step("Searching remote registry...");
+    p::info("Searching remote registry...");
 
     let config = registry::load_registry_config()?;
     let client = registry::RegistryClient::new(config.url, config.token);
 
-    let tag_list = tags
-        .as_ref()
-        .map(|t| t.split(',').map(|s| s.trim().to_string()).collect::<Vec<_>>());
+    let tag_list = tags.as_ref().map(|t| {
+        t.split(',')
+            .map(|s| s.trim().to_string())
+            .collect::<Vec<_>>()
+    });
 
     let req = registry::SearchRequest {
         query: query.clone(),
@@ -188,7 +199,7 @@ fn search(
         println!(
             "  {}. {} v{}{}",
             idx + 1,
-            colored::Colorize::cyan(&tpl.name),
+            colored::Colorize::cyan(tpl.name.as_str()),
             tpl.version,
             badges
         );
@@ -208,7 +219,7 @@ fn search(
 }
 
 fn info(name: String, version: Option<String>) -> Result<()> {
-    p::step(&format!(
+    p::info(&format!(
         "Fetching template info for '{}'{}",
         name,
         version
@@ -223,7 +234,11 @@ fn info(name: String, version: Option<String>) -> Result<()> {
     let tpl = client.get_template(&name, version.as_deref())?;
 
     println!();
-    println!("{} v{}", colored::Colorize::cyan(&tpl.name), tpl.version);
+    println!(
+        "{} v{}",
+        colored::Colorize::cyan(tpl.name.as_str()),
+        tpl.version
+    );
     println!("{}", tpl.description);
     println!();
     println!("Author:       {}", tpl.author);
@@ -237,7 +252,10 @@ fn info(name: String, version: Option<String>) -> Result<()> {
         println!("Documentation: {}", docs);
     }
     println!("Downloads:    {}", tpl.downloads);
-    println!("Rating:       ⭐ {:.1} ({} reviews)", tpl.ratings.average_rating, tpl.ratings.review_count);
+    println!(
+        "Rating:       ⭐ {:.1} ({} reviews)",
+        tpl.ratings.average_rating, tpl.ratings.review_count
+    );
     println!("Tags:         {}", tpl.tags.join(", "));
     println!();
 
@@ -260,7 +278,7 @@ fn login(email: Option<String>) -> Result<()> {
         .with_prompt("Password")
         .interact()?;
 
-    p::step("Authenticating with remote registry...");
+    p::info("Authenticating with remote registry...");
 
     let config = registry::load_registry_config()?;
     let client = registry::RegistryClient::new(config.url.clone(), None);
@@ -271,8 +289,12 @@ fn login(email: Option<String>) -> Result<()> {
         anyhow::bail!("Authentication failed: {}", resp.message);
     }
 
-    let token = resp.token.ok_or_else(|| anyhow::anyhow!("No token received"))?;
-    let username = resp.username.ok_or_else(|| anyhow::anyhow!("No username received"))?;
+    let token = resp
+        .token
+        .ok_or_else(|| anyhow::anyhow!("No token received"))?;
+    let username = resp
+        .username
+        .ok_or_else(|| anyhow::anyhow!("No username received"))?;
 
     // Save credentials
     let mut new_config = config;
@@ -317,7 +339,7 @@ fn signup(email: Option<String>, username: Option<String>) -> Result<()> {
         anyhow::bail!("Password must be at least 8 characters");
     }
 
-    p::step("Creating account...");
+    p::info("Creating account...");
 
     let config = registry::load_registry_config()?;
     let client = registry::RegistryClient::new(config.url.clone(), None);
@@ -328,7 +350,9 @@ fn signup(email: Option<String>, username: Option<String>) -> Result<()> {
         anyhow::bail!("Signup failed: {}", resp.message);
     }
 
-    let token = resp.token.ok_or_else(|| anyhow::anyhow!("No token received"))?;
+    let token = resp
+        .token
+        .ok_or_else(|| anyhow::anyhow!("No token received"))?;
 
     // Save credentials
     let mut new_config = config;
@@ -370,7 +394,7 @@ fn publish(
         anyhow::bail!("Not logged in. Use 'starforge registry login' first.");
     }
 
-    p::step("Preparing template for publication...");
+    p::info("Preparing template for publication...");
 
     // Validate template structure
     let template_name = name.clone().unwrap_or_else(|| {
@@ -386,7 +410,7 @@ fn publish(
     templates::validate_template_structure(&path, &template_name, &description, &author, &version)?;
 
     // Create zip archive
-    p::step("Creating archive...");
+    p::info("Creating archive...");
     let temp_dir = std::env::temp_dir().join(format!("starforge-pub-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&temp_dir)?;
     let zip_path = temp_dir.join("template.zip");
@@ -398,7 +422,11 @@ fn publish(
     let encoded = base64::engine::general_purpose::STANDARD.encode(&archive_bytes);
 
     let tag_list = tags
-        .map(|t| t.split(',').map(|s| s.trim().to_string()).collect::<Vec<_>>())
+        .map(|t| {
+            t.split(',')
+                .map(|s| s.trim().to_string())
+                .collect::<Vec<_>>()
+        })
         .unwrap_or_default();
 
     let publish_req = registry::PublishTemplateRequest {
@@ -416,7 +444,7 @@ fn publish(
         content: encoded,
     };
 
-    p::step("Publishing to remote registry...");
+    p::info("Publishing to remote registry...");
 
     let client = registry::RegistryClient::new(config.url, config.token);
     let resp = client.publish(&publish_req)?;
@@ -438,7 +466,7 @@ fn publish(
 }
 
 fn install(name: String, version: Option<String>) -> Result<()> {
-    p::step(&format!(
+    p::info(&format!(
         "Downloading template '{}'{}",
         name,
         version
@@ -461,7 +489,7 @@ fn install(name: String, version: Option<String>) -> Result<()> {
     let zip_path = temp_dir.join("template.zip");
     std::fs::write(&zip_path, archive_bytes)?;
 
-    p::step("Extracting and installing...");
+    p::info("Extracting and installing...");
 
     let extract_dir = temp_dir.join("extracted");
     templates::extract_zip_archive(&zip_path, &extract_dir)?;
@@ -488,7 +516,7 @@ fn install(name: String, version: Option<String>) -> Result<()> {
 }
 
 fn review(name: String, rating: u8, comment: Option<String>) -> Result<()> {
-    if rating < 1 || rating > 5 {
+    if !(1..=5).contains(&rating) {
         anyhow::bail!("Rating must be between 1 and 5");
     }
 
@@ -497,7 +525,7 @@ fn review(name: String, rating: u8, comment: Option<String>) -> Result<()> {
         anyhow::bail!("Not logged in. Use 'starforge registry login' first.");
     }
 
-    p::step("Posting review...");
+    p::info("Posting review...");
 
     let client = registry::RegistryClient::new(config.url, config.token);
     let tpl = client.get_template(&name, None)?;
@@ -519,7 +547,11 @@ fn status() -> Result<()> {
     println!("Registry: {}", config.url);
 
     if let Some(username) = config.username {
-        println!("Status:   {} (logged in as '{}')", colored::Colorize::green("✓"), username);
+        println!(
+            "Status:   {} (logged in as '{}')",
+            colored::Colorize::green("✓"),
+            username
+        );
         if let Some(email) = config.email {
             println!("Email:    {}", email);
         }
@@ -558,7 +590,7 @@ fn create_zip_archive(source: &std::path::Path, dest: &std::path::Path) -> Resul
     let options = zip::write::FileOptions::default();
 
     let mut entries = Vec::new();
-    collect_files(source, source, &mut entries, &mut vec![".git", ".DS_Store"])?;
+    collect_files(source, &mut entries, &mut vec![".git", ".DS_Store"])?;
 
     for entry in entries {
         let rel = entry.strip_prefix(source)?;
@@ -579,7 +611,6 @@ fn create_zip_archive(source: &std::path::Path, dest: &std::path::Path) -> Resul
 
 fn collect_files(
     dir: &std::path::Path,
-    root: &std::path::Path,
     out: &mut Vec<std::path::PathBuf>,
     skip_names: &mut Vec<&str>,
 ) -> Result<()> {
@@ -594,7 +625,7 @@ fn collect_files(
 
         if path.is_dir() {
             out.push(path.clone());
-            collect_files(&path, root, out, skip_names)?;
+            collect_files(&path, out, skip_names)?;
         } else {
             out.push(path);
         }

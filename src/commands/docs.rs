@@ -116,9 +116,7 @@ fn generate(
                 },
             ],
             returns: Some("bool".to_string()),
-            examples: vec![
-                "contract.transfer(&from, &to, 1000)".to_string(),
-            ],
+            examples: vec!["contract.transfer(&from, &to, 1000)".to_string()],
         },
     ];
 
@@ -191,10 +189,7 @@ fn generate(
 
     p::step(3, 3, "Updating documentation index...");
     println!();
-    p::success(&format!(
-        "Documentation generated for '{}'",
-        name
-    ));
+    p::success(&format!("Documentation generated for '{}'", name));
     p::kv("Contract", &entry.contract_id);
     p::kv("Version", &entry.version);
     p::kv("Network", &entry.network);
@@ -230,7 +225,11 @@ fn show(contract: String, version: Option<String>) -> Result<()> {
             println!("    {}", func.description);
             if !func.parameters.is_empty() {
                 for param in &func.parameters {
-                    let req = if param.required { "required" } else { "optional" };
+                    let req = if param.required {
+                        "required"
+                    } else {
+                        "optional"
+                    };
                     println!(
                         "    • {} ({}): {} [{}]",
                         param.name, param.ty, param.description, req
@@ -259,7 +258,10 @@ fn show(contract: String, version: Option<String>) -> Result<()> {
     if !entry.api.storage.is_empty() {
         p::info("Storage Layout");
         for storage in &entry.api.storage {
-            println!("  • {} ({}): {}", storage.key, storage.ty, storage.description);
+            println!(
+                "  • {} ({}): {}",
+                storage.key, storage.ty, storage.description
+            );
         }
     }
 

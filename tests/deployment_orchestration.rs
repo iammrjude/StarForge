@@ -70,7 +70,10 @@ fn build_and_execute_plan_dry_run() {
     let manifest = load_manifest(&manifest_path).unwrap();
     let mut state = build_plan(&manifest).unwrap();
     execute_plan(&mut state, true).unwrap();
-    assert_eq!(state.steps[0].status, starforge::utils::deploy_orchestrator::DeployStepStatus::Deployed);
+    assert_eq!(
+        state.steps[0].status,
+        starforge::utils::deploy_orchestrator::DeployStepStatus::Deployed
+    );
 
     let rolled = rollback(&mut state).unwrap();
     assert_eq!(rolled, vec!["solo"]);

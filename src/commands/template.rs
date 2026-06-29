@@ -1,4 +1,4 @@
-use crate::utils::{print as p, templates, registry};
+use crate::utils::{print as p, registry, templates};
 use anyhow::Result;
 use clap::Subcommand;
 use std::path::PathBuf;

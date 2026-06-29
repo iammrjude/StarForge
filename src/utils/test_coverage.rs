@@ -72,10 +72,9 @@ fn estimate_lines_covered(source: &str, executed: &HashSet<String>) -> u32 {
                 .and_then(|rest| rest.split('(').next())
                 .map(|s| s.trim().to_string());
         }
-        if current_fn
-            .as_ref()
-            .is_some_and(|f| executed.contains(f) && !trimmed.is_empty() && !trimmed.starts_with("//"))
-        {
+        if current_fn.as_ref().is_some_and(|f| {
+            executed.contains(f) && !trimmed.is_empty() && !trimmed.starts_with("//")
+        }) {
             covered += 1;
         }
     }

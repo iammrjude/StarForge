@@ -78,12 +78,9 @@ pub struct GasUsageRecord {
 
 fn metrics_dir() -> Result<PathBuf> {
     let home = dirs::home_dir().ok_or_else(|| anyhow::anyhow!("Could not find home directory"))?;
-    let dir = home
-        .join(".starforge")
-        .join("metrics");
+    let dir = home.join(".starforge").join("metrics");
     if !dir.exists() {
-        fs::create_dir_all(&dir)
-            .with_context(|| format!("Failed to create {}", dir.display()))?;
+        fs::create_dir_all(&dir).with_context(|| format!("Failed to create {}", dir.display()))?;
     }
     Ok(dir)
 }
@@ -191,7 +188,9 @@ pub fn set_alert(
         }
     };
 
-    contract_metrics.alerts.retain(|a| a.metric_name != metric_name);
+    contract_metrics
+        .alerts
+        .retain(|a| a.metric_name != metric_name);
     contract_metrics.alerts.push(AlertConfig {
         metric_name: metric_name.to_string(),
         threshold,
@@ -275,7 +274,11 @@ pub fn generate_report(contract_id: &str, network: &str) -> Result<PerformanceRe
             total_executions: gas_history.len() as u64,
             avg_gas_used: avg_gas,
             max_gas_used: max_gas,
-            min_gas_used: if min_gas == f64::INFINITY { 0.0 } else { min_gas },
+            min_gas_used: if min_gas == f64::INFINITY {
+                0.0
+            } else {
+                min_gas
+            },
             avg_execution_time_ms: avg_time,
             success_rate,
         },
@@ -311,7 +314,7 @@ impl MetricCollector {
         record_gas_usage(&GasUsageRecord {
             contract_id: self.contract_id.clone(),
             operation: "execution".to_string(),
-            gas_used: total_ms as u64 * 100,
+            gas_used: total_ms * 100,
             timestamp: chrono::Utc::now().to_rfc3339(),
             success: true,
             execution_time_ms: total_ms,

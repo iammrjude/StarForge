@@ -76,12 +76,7 @@ rustyline = "14.0.0"
 zip = "0.6"
 tempfile = "3.8"
 wasm-bindgen = "0.2"
-wasm-bindgen-futures = "0.4"
-async-graphql = "0.12"
-async-graphql-actix-web = "0.12"
-tokio = { version = "1", features = ["full"] }
-actix-web = "4"
-actix-rt = "2"
+rusqlite = { version = "0.32", features = ["bundled"] }
 
 [features]
 hardware-wallet = ["dep:hidapi", "dep:trezor-client"]
@@ -90,7 +85,7 @@ hardware-wallet = ["dep:hidapi", "dep:trezor-client"]
 criterion = "0.5.1"
 tempfile = "3.8"
 mockito = "1.2"
-wasm-bindgen-test = "1.3"
+wasm-bindgen-test = "0.3"
 
 [[bench]]
 name = "benchmarks"

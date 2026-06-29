@@ -53,11 +53,8 @@ impl IncidentStore {
     }
 
     pub fn save_all(records: &[IncidentRecord]) -> Result<()> {
-        fs::write(
-            Self::index_path()?,
-            serde_json::to_string_pretty(records)?,
-        )
-        .context("Failed to save incidents")
+        fs::write(Self::index_path()?, serde_json::to_string_pretty(records)?)
+            .context("Failed to save incidents")
     }
 
     pub fn create(

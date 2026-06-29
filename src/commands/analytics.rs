@@ -230,10 +230,7 @@ pub fn compute_metrics(
     let min_fee = fees.iter().copied().min();
     let max_fee = fees.iter().copied().max();
 
-    let durations: Vec<u64> = filtered
-        .iter()
-        .filter_map(|e| e.duration_secs)
-        .collect();
+    let durations: Vec<u64> = filtered.iter().filter_map(|e| e.duration_secs).collect();
     let avg_duration = if durations.is_empty() {
         None
     } else {
@@ -280,10 +277,7 @@ pub fn detect_anomalies(
     fee_threshold: f64,
     min_samples: usize,
 ) -> Vec<Anomaly> {
-    let net_events: Vec<_> = events
-        .iter()
-        .filter(|e| e.network == network)
-        .collect();
+    let net_events: Vec<_> = events.iter().filter(|e| e.network == network).collect();
 
     if net_events.len() < min_samples {
         return vec![];
@@ -362,14 +356,10 @@ fn events_to_csv(events: &[DeploymentEvent]) -> String {
             e.network,
             e.wasm_hash.as_deref().unwrap_or(""),
             e.deployer.as_deref().unwrap_or(""),
-            e.fee_stroops
-                .map(|f| f.to_string())
-                .unwrap_or_default(),
+            e.fee_stroops.map(|f| f.to_string()).unwrap_or_default(),
             e.tx_hash.as_deref().unwrap_or(""),
             e.label.as_deref().unwrap_or(""),
-            e.duration_secs
-                .map(|d| d.to_string())
-                .unwrap_or_default(),
+            e.duration_secs.map(|d| d.to_string()).unwrap_or_default(),
             e.success,
             e.error.as_deref().unwrap_or(""),
             e.timestamp,
@@ -428,20 +418,10 @@ fn handle_track(args: TrackArgs) -> Result<()> {
     p::kv_accent("Event ID", &id);
     p::kv("Contract", &args.contract_id);
     p::kv("Network", &args.network);
-    p::kv(
-        "Status",
-        if args.success {
-            "success"
-        } else {
-            "failed"
-        },
-    );
+    p::kv("Status", if args.success { "success" } else { "failed" });
     if let Some(fee) = args.fee_stroops {
         p::kv("Fee (stroops)", &fee.to_string());
-        p::kv(
-            "Fee (XLM)",
-            &format!("{:.7}", fee as f64 / 10_000_000.0),
-        );
+        p::kv("Fee (XLM)", &format!("{:.7}", fee as f64 / 10_000_000.0));
     }
     p::separator();
     p::success("Deployment event recorded.");
@@ -470,25 +450,16 @@ fn handle_metrics(args: MetricsArgs) -> Result<()> {
     if let Some(ref n) = metrics.network {
         p::kv("Network", n);
     }
-    p::kv("Total deployments", &format!("{}", metrics.total_deployments));
     p::kv(
-        "Successful",
-        &format!("{}", metrics.successful),
+        "Total deployments",
+        &format!("{}", metrics.total_deployments),
     );
-    p::kv(
-        "Failed",
-        &format!("{}", metrics.failed),
-    );
-    p::kv(
-        "Success rate",
-        &format!("{:.1}%", metrics.success_rate_pct),
-    );
+    p::kv("Successful", &format!("{}", metrics.successful));
+    p::kv("Failed", &format!("{}", metrics.failed));
+    p::kv("Success rate", &format!("{:.1}%", metrics.success_rate_pct));
     if let Some(avg) = metrics.avg_fee_stroops {
         p::kv("Avg fee (stroops)", &format!("{:.0}", avg));
-        p::kv(
-            "Avg fee (XLM)",
-            &format!("{:.7}", avg / 10_000_000.0),
-        );
+        p::kv("Avg fee (XLM)", &format!("{:.7}", avg / 10_000_000.0));
     }
     if let Some(min) = metrics.min_fee_stroops {
         p::kv("Min fee (stroops)", &format!("{}", min));
@@ -500,10 +471,7 @@ fn handle_metrics(args: MetricsArgs) -> Result<()> {
         p::kv("Avg duration (s)", &format!("{:.1}", dur));
     }
     p::kv("Unique deployers", &format!("{}", metrics.unique_deployers));
-    p::kv(
-        "Unique contracts",
-        &format!("{}", metrics.unique_contracts),
-    );
+    p::kv("Unique contracts", &format!("{}", metrics.unique_contracts));
     if let Some(ref first) = metrics.first_deployment {
         p::kv("First deployment", first.get(..16).unwrap_or(first));
     }
@@ -520,11 +488,7 @@ fn handle_list(args: ListArgs) -> Result<()> {
     let events = load_events()?;
     let mut filtered: Vec<_> = events
         .iter()
-        .filter(|e| {
-            args.network
-                .as_deref()
-                .is_none_or(|n| e.network == n)
-        })
+        .filter(|e| args.network.as_deref().is_none_or(|n| e.network == n))
         .filter(|e| {
             args.contract_id
                 .as_deref()
@@ -626,11 +590,7 @@ fn handle_export(args: ExportArgs) -> Result<()> {
     let events = load_events()?;
     let filtered: Vec<_> = events
         .iter()
-        .filter(|e| {
-            args.network
-                .as_deref()
-                .is_none_or(|n| e.network == n)
-        })
+        .filter(|e| args.network.as_deref().is_none_or(|n| e.network == n))
         .cloned()
         .collect();
 
@@ -661,11 +621,7 @@ fn handle_dashboard(args: DashboardArgs) -> Result<()> {
     let anomalies = detect_anomalies(&events, &args.network, 3.0, 3);
 
     p::separator();
-    println!(
-        "  {} {}",
-        "Network:".dimmed(),
-        args.network.cyan().bold()
-    );
+    println!("  {} {}", "Network:".dimmed(), args.network.cyan().bold());
     println!();
 
     // Summary bar
@@ -677,9 +633,7 @@ fn handle_dashboard(args: DashboardArgs) -> Result<()> {
     println!(
         "  {:<28}  {}",
         "Success rate".bright_white(),
-        format!("{:.1}%", metrics.success_rate_pct)
-            .green()
-            .bold()
+        format!("{:.1}%", metrics.success_rate_pct).green().bold()
     );
     println!(
         "  {:<28}  {}",
@@ -712,11 +666,7 @@ fn handle_dashboard(args: DashboardArgs) -> Result<()> {
 
     println!();
     if anomalies.is_empty() {
-        println!(
-            "  {} {}",
-            "Anomalies:".dimmed(),
-            "none detected".green()
-        );
+        println!("  {} {}", "Anomalies:".dimmed(), "none detected".green());
     } else {
         println!(
             "  {} {}",
@@ -737,9 +687,8 @@ fn handle_dashboard(args: DashboardArgs) -> Result<()> {
     if metrics.total_deployments > 0 {
         println!();
         let bar_width = 40usize;
-        let ok_bars =
-            (metrics.successful as f64 / metrics.total_deployments as f64 * bar_width as f64)
-                as usize;
+        let ok_bars = (metrics.successful as f64 / metrics.total_deployments as f64
+            * bar_width as f64) as usize;
         let fail_bars = bar_width - ok_bars;
         println!(
             "  Success/Fail  [{}{}]",

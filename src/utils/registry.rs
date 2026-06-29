@@ -227,8 +227,7 @@ impl RegistryClient {
         let url = format!("{}/api/templates/publish", self.registry_url);
         let payload = serde_json::to_string(req)?;
 
-        let mut request = ureq::post(&url)
-            .set("Content-Type", "application/json");
+        let mut request = ureq::post(&url).set("Content-Type", "application/json");
 
         if let Some(ref token) = self.token {
             request = request.set("Authorization", &format!("Bearer {}", token));
@@ -237,14 +236,6 @@ impl RegistryClient {
         let resp = request
             .send_string(&payload)
             .with_context(|| format!("Failed to publish template to {}", url))?;
-
-        if !resp.ok() {
-            anyhow::bail!(
-                "Publish failed with status {}: {}",
-                resp.status(),
-                resp.into_string().unwrap_or_default()
-            );
-        }
 
         let result: PublishTemplateResponse = resp.into_json()?;
         Ok(result)
@@ -324,8 +315,16 @@ impl RegistryClient {
     }
 
     /// Post a review/rating for a template.
-    pub fn post_review(&self, template_id: &str, rating: u8, comment: Option<&str>) -> Result<ReviewResponse> {
-        let url = format!("{}/api/templates/{}/reviews", self.registry_url, template_id);
+    pub fn post_review(
+        &self,
+        template_id: &str,
+        rating: u8,
+        comment: Option<&str>,
+    ) -> Result<ReviewResponse> {
+        let url = format!(
+            "{}/api/templates/{}/reviews",
+            self.registry_url, template_id
+        );
         let req = ReviewRequest {
             template_id: template_id.to_string(),
             rating,
@@ -333,8 +332,7 @@ impl RegistryClient {
         };
         let payload = serde_json::to_string(&req)?;
 
-        let mut request = ureq::post(&url)
-            .set("Content-Type", "application/json");
+        let mut request = ureq::post(&url).set("Content-Type", "application/json");
 
         if let Some(ref token) = self.token {
             request = request.set("Authorization", &format!("Bearer {}", token));
@@ -343,14 +341,6 @@ impl RegistryClient {
         let resp = request
             .send_string(&payload)
             .with_context(|| format!("Failed to post review to {}", url))?;
-
-        if !resp.ok() {
-            anyhow::bail!(
-                "Failed to post review with status {}: {}",
-                resp.status(),
-                resp.into_string().unwrap_or_default()
-            );
-        }
 
         let result: ReviewResponse = resp.into_json()?;
         Ok(result)
@@ -364,8 +354,12 @@ pub fn load_registry_config() -> Result<RegistryConfig> {
 
     if config_path.exists() {
         let contents = fs::read_to_string(&config_path)?;
-        toml::from_str(&contents)
-            .with_context(|| format!("Failed to parse registry config at {}", config_path.display()))
+        toml::from_str(&contents).with_context(|| {
+            format!(
+                "Failed to parse registry config at {}",
+                config_path.display()
+            )
+        })
     } else {
         Ok(RegistryConfig::default())
     }
@@ -382,8 +376,12 @@ pub fn save_registry_config(config: &RegistryConfig) -> Result<()> {
     }
 
     let contents = toml::to_string_pretty(config)?;
-    fs::write(&config_path, contents)
-        .with_context(|| format!("Failed to write registry config to {}", config_path.display()))?;
+    fs::write(&config_path, contents).with_context(|| {
+        format!(
+            "Failed to write registry config to {}",
+            config_path.display()
+        )
+    })?;
 
     Ok(())
 }

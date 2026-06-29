@@ -33,18 +33,6 @@ pub struct TestArgs {
     #[arg(long)]
     pub report: Option<String>,
 
-    /// Generate automated test cases from contract
-    #[arg(long, default_value = "false")]
-    pub generate: bool,
-
-    /// Run tests in parallel
-    #[arg(long, default_value = "false")]
-    pub parallel: bool,
-
-    /// Number of parallel workers (default: 4)
-    #[arg(long, default_value = "4")]
-    pub workers: usize,
-
     /// Path to contract source directory for test generation
     #[arg(long)]
     pub contract_path: Option<PathBuf>,
@@ -68,7 +56,10 @@ pub fn handle(args: TestArgs) -> Result<()> {
         p::kv("Report", r);
     }
     p::kv("Generate tests", if args.generate { "yes" } else { "no" });
-    p::kv("Parallel execution", if args.parallel { "yes" } else { "no" });
+    p::kv(
+        "Parallel execution",
+        if args.parallel { "yes" } else { "no" },
+    );
     if args.parallel {
         p::kv("Workers", &args.workers.to_string());
     }
@@ -79,9 +70,9 @@ pub fn handle(args: TestArgs) -> Result<()> {
             p::info("Generating automated test cases...");
             let generator = test_automation::TestCaseGenerator::new(contract_path.clone());
             let suite = generator.generate_from_contract()?;
-            
+
             p::success(&format!("Generated {} test cases", suite.test_cases.len()));
-            
+
             // Save test suite
             let suite_path = contract_path.join("test_suite.json");
             let json = serde_json::to_string_pretty(&suite)?;
@@ -97,11 +88,11 @@ pub fn handle(args: TestArgs) -> Result<()> {
             if suite_path.exists() {
                 let suite_content = std::fs::read_to_string(&suite_path)?;
                 let suite: test_automation::TestSuite = serde_json::from_str(&suite_content)?;
-                
+
                 p::info("Running tests in parallel...");
                 let runner = test_automation::ParallelTestRunner::new(args.workers);
                 let report = runner.run_tests(&suite, &args.wasm)?;
-                
+
                 // Export report
                 if let Some(report_format) = &args.report {
                     let report_path = match report_format.as_str() {
@@ -110,34 +101,51 @@ pub fn handle(args: TestArgs) -> Result<()> {
                         "junit" => PathBuf::from("test_report.xml"),
                         _ => PathBuf::from("test_report.html"),
                     };
-                    
+
                     match report_format.as_str() {
-                        "html" => test_automation::TestReportExporter::export_html(&report, &report_path)?,
-                        "json" => test_automation::TestReportExporter::export_json(&report, &report_path)?,
-                        "junit" => test_automation::TestReportExporter::export_junit(&report, &report_path)?,
-                        _ => test_automation::TestReportExporter::export_html(&report, &report_path)?,
+                        "html" => {
+                            test_automation::TestReportExporter::export_html(&report, &report_path)?
+                        }
+                        "json" => {
+                            test_automation::TestReportExporter::export_json(&report, &report_path)?
+                        }
+                        "junit" => test_automation::TestReportExporter::export_junit(
+                            &report,
+                            &report_path,
+                        )?,
+                        _ => {
+                            test_automation::TestReportExporter::export_html(&report, &report_path)?
+                        }
                     }
-                    
+
                     p::kv("Report saved", &report_path.display().to_string());
                 }
-                
+
                 println!();
                 p::separator();
                 p::kv("Total tests", &report.total_tests.to_string());
                 p::kv("Passed", &report.passed.to_string());
                 p::kv("Failed", &report.failed.to_string());
-                p::kv("Coverage", &format!("{}%", 
-                    if report.coverage_summary.lines_total > 0 {
-                        (report.coverage_summary.lines_covered as f64 / report.coverage_summary.lines_total as f64 * 100.0) as u32
-                    } else { 0 }
-                ));
+                p::kv(
+                    "Coverage",
+                    &format!(
+                        "{}%",
+                        if report.coverage_summary.lines_total > 0 {
+                            (report.coverage_summary.lines_covered as f64
+                                / report.coverage_summary.lines_total as f64
+                                * 100.0) as u32
+                        } else {
+                            0
+                        }
+                    ),
+                );
                 p::kv("Duration", &format!("{}ms", report.total_duration_ms));
                 p::separator();
-                
+
                 if report.failed > 0 {
                     anyhow::bail!("Some contract tests failed");
                 }
-                
+
                 p::success("All contract tests passed");
                 return Ok(());
             }

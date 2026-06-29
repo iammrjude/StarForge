@@ -1,4 +1,5 @@
 pub mod anomaly;
+pub mod audit;
 pub mod checklist;
 pub mod event_rules;
 pub mod hardening;
@@ -9,6 +10,7 @@ pub mod threat_intel;
 pub mod validation;
 
 pub use anomaly::{AnomalyDetector, AnomalyFinding};
+pub use audit::{format_report, run_audit, AuditConfig, AuditResult, VulnerabilityFinding};
 pub use checklist::{run_checklist, ChecklistItem, ChecklistResult};
 pub use event_rules::{default_rules, evaluate_event, SecurityEvent, SecurityEventRule};
 pub use hardening::{apply_hardening, HardeningOptions, HardeningResult};

@@ -97,8 +97,7 @@ fn docs_dir() -> Result<PathBuf> {
     let home = dirs::home_dir().ok_or_else(|| anyhow::anyhow!("Could not find home directory"))?;
     let dir = home.join(".starforge").join("docs");
     if !dir.exists() {
-        fs::create_dir_all(&dir)
-            .with_context(|| format!("Failed to create {}", dir.display()))?;
+        fs::create_dir_all(&dir).with_context(|| format!("Failed to create {}", dir.display()))?;
     }
     Ok(dir)
 }
@@ -302,10 +301,7 @@ pub fn render_markdown(contract_id: &str, version: Option<&str>) -> Result<Strin
     md.push_str(&format!("**Contract:** `{}`\n", entry.contract_id));
     md.push_str(&format!("**Network:** {}\n", entry.network));
     md.push_str(&format!("**Version:** {}\n", entry.version));
-    md.push_str(&format!(
-        "**Generated:** {}\n\n",
-        &entry.generated_at[..10]
-    ));
+    md.push_str(&format!("**Generated:** {}\n\n", &entry.generated_at[..10]));
     md.push_str(&format!("{}\n\n", entry.description));
 
     for section in &entry.sections {
@@ -324,7 +320,11 @@ pub fn render_markdown(contract_id: &str, version: Option<&str>) -> Result<Strin
             if !func.parameters.is_empty() {
                 md.push_str("**Parameters:**\n\n");
                 for param in &func.parameters {
-                    let req = if param.required { "required" } else { "optional" };
+                    let req = if param.required {
+                        "required"
+                    } else {
+                        "optional"
+                    };
                     md.push_str(&format!(
                         "- `{}` ({}, {}): {}\n",
                         param.name, param.ty, req, param.description
@@ -354,7 +354,10 @@ pub fn render_markdown(contract_id: &str, version: Option<&str>) -> Result<Strin
             if !event.topics.is_empty() {
                 md.push_str("**Topics:**\n\n");
                 for topic in &event.topics {
-                    md.push_str(&format!("- `{}` ({}): {}\n", topic.name, topic.ty, topic.description));
+                    md.push_str(&format!(
+                        "- `{}` ({}): {}\n",
+                        topic.name, topic.ty, topic.description
+                    ));
                 }
                 md.push('\n');
             }
@@ -364,7 +367,10 @@ pub fn render_markdown(contract_id: &str, version: Option<&str>) -> Result<Strin
     if !entry.api.storage.is_empty() {
         md.push_str("### Storage\n\n");
         for storage in &entry.api.storage {
-            md.push_str(&format!("- `{}` ({}): {}\n", storage.key, storage.ty, storage.description));
+            md.push_str(&format!(
+                "- `{}` ({}): {}\n",
+                storage.key, storage.ty, storage.description
+            ));
         }
         md.push('\n');
     }
@@ -381,12 +387,7 @@ pub struct SearchResult {
     pub matched_sections: Vec<String>,
 }
 
-fn update_index(
-    contract_id: &str,
-    name: &str,
-    version: &str,
-    doc_file: &Path,
-) -> Result<()> {
+fn update_index(contract_id: &str, name: &str, version: &str, doc_file: &Path) -> Result<()> {
     let mut index = list_documentation()?;
 
     let filename = doc_file
@@ -406,9 +407,7 @@ fn update_index(
                 path: filename,
             });
         }
-        contract
-            .versions
-            .sort_by(|a, b| b.version.cmp(&a.version));
+        contract.versions.sort_by(|a, b| b.version.cmp(&a.version));
     } else {
         index.contracts.push(DocIndexEntry {
             contract_id: contract_id.to_string(),

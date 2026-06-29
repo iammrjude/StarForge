@@ -1,7 +1,7 @@
+use anyhow::Result;
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use chrono::Utc;
-use anyhow::Result;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Proposal {
@@ -67,11 +67,7 @@ impl Proposal {
         if self.is_complete() {
             "ready".to_string()
         } else {
-            format!(
-                "pending ({}/{})",
-                self.signatures.len(),
-                self.threshold
-            )
+            format!("pending ({}/{})", self.signatures.len(), self.threshold)
         }
     }
 
@@ -89,19 +85,19 @@ impl Proposal {
 }
 
 pub fn generate_signature(wallet: &str) -> Result<String> {
-    use sha2::{Sha256, Digest};
     use hex;
+    use sha2::{Digest, Sha256};
 
     let mut hasher = Sha256::new();
     hasher.update(wallet.as_bytes());
     let result = hasher.finalize();
-    
+
     Ok(hex::encode(result))
 }
 
 pub fn verify_signature(signer: &str, signature: &str, message: &str) -> bool {
-    use sha2::{Sha256, Digest};
     use hex;
+    use sha2::{Digest, Sha256};
 
     let mut hasher = Sha256::new();
     hasher.update(message.as_bytes());
@@ -170,7 +166,11 @@ mod tests {
 
     #[test]
     fn test_proposal_creation() {
-        let signers = vec!["alice".to_string(), "bob".to_string(), "charlie".to_string()];
+        let signers = vec![
+            "alice".to_string(),
+            "bob".to_string(),
+            "charlie".to_string(),
+        ];
         let proposal = Proposal::new(2, signers, "testnet".to_string());
 
         assert_eq!(proposal.threshold, 2);
@@ -193,7 +193,11 @@ mod tests {
 
     #[test]
     fn test_pending_signers() {
-        let signers = vec!["alice".to_string(), "bob".to_string(), "charlie".to_string()];
+        let signers = vec![
+            "alice".to_string(),
+            "bob".to_string(),
+            "charlie".to_string(),
+        ];
         let mut proposal = Proposal::new(2, signers, "testnet".to_string());
 
         proposal.add_signature("alice".to_string(), "sig123".to_string());
