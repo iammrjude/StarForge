@@ -258,8 +258,17 @@ fn handle_rollback(args: RollbackArgs) -> Result<()> {
         .as_deref()
         .unwrap_or("CXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX");
 
+    // Record the rollback in history: appends a rollback record linked to the
+    // target and marks any later successful deployment on this network as
+    // rolled-back, so `deployments history`/`dashboard` reflect the revert.
+    let rollback_id = crate::utils::deploy_history::record_rollback(&record, &wallet.name)?;
+
     p::separator();
-    p::success("Rollback command (run this to revert on-chain):");
+    p::success("Rollback recorded in deployment history.");
+    p::kv("Rollback record", &rollback_id[..8.min(rollback_id.len())]);
+    p::kv("Reverted to", &record.id[..8.min(record.id.len())]);
+    println!();
+    p::info("Run this to revert the contract on-chain:");
     println!();
     println!(
         "  {}",
@@ -268,12 +277,6 @@ fn handle_rollback(args: RollbackArgs) -> Result<()> {
             contract_id, wallet.public_key, args.network, record.wasm_hash
         )
         .cyan()
-    );
-    println!();
-    p::info("After running the above command, record the rollback:");
-    println!(
-        "  {}",
-        "# starforge deployments history (the rolled-back entry will be marked)".dimmed()
     );
     p::separator();
     Ok(())
