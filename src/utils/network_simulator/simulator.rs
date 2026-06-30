@@ -6,7 +6,9 @@
 use crate::utils::network_simulator::deterministic::{
     derive_contract_id, derive_public_key, derive_tx_hash, DeterministicConfig, SeededRng,
 };
-use crate::utils::network_simulator::failure::{failure_to_rpc_error, FailureInjector, FailureMode};
+use crate::utils::network_simulator::failure::{
+    failure_to_rpc_error, FailureInjector, FailureMode,
+};
 use crate::utils::network_simulator::state::SnapshotManager;
 use crate::utils::network_simulator::time::{LedgerTime, TimeController};
 use chrono::Utc;
@@ -177,6 +179,8 @@ impl NetworkSimulator {
     /// Create a simulator with a custom configuration.
     pub fn with_config(config: SimulatorConfig) -> Self {
         let seed = config.deterministic.seed;
+        let initial_accounts = config.initial_accounts.clone();
+        let enable_failure_injection = config.enable_failure_injection;
         let mut sim = Self {
             ledger: LedgerInfo {
                 sequence: config.initial_ledger_sequence,
@@ -196,12 +200,12 @@ impl NetworkSimulator {
             config,
         };
 
-        if config.enable_failure_injection {
+        if enable_failure_injection {
             sim.failure_injector.enable();
         }
 
         // Create initial accounts.
-        for (key_or_name, balance) in &config.initial_accounts {
+        for (key_or_name, balance) in &initial_accounts {
             let pk = if key_or_name.starts_with('G') && key_or_name.len() == 56 {
                 key_or_name.clone()
             } else {
@@ -438,11 +442,7 @@ impl NetworkSimulator {
     }
 
     /// Read a storage value from a contract.
-    pub fn read_contract_storage(
-        &self,
-        contract_id: &str,
-        key: &str,
-    ) -> Option<&String> {
+    pub fn read_contract_storage(&self, contract_id: &str, key: &str) -> Option<&String> {
         self.contracts
             .get(contract_id)
             .and_then(|c| c.storage.get(key))
@@ -717,14 +717,12 @@ impl NetworkSimulator {
                 }
                 format!("{}", (hash[0] as u64) * 1_000_000)
             }
-            "symbol" | "name" | "decimals" => {
-                match function {
-                    "symbol" => "\"SIM\"".to_string(),
-                    "name" => "\"Simulator Token\"".to_string(),
-                    "decimals" => "7".to_string(),
-                    _ => "\"unknown\"".to_string(),
-                }
-            }
+            "symbol" | "name" | "decimals" => match function {
+                "symbol" => "\"SIM\"".to_string(),
+                "name" => "\"Simulator Token\"".to_string(),
+                "decimals" => "7".to_string(),
+                _ => "\"unknown\"".to_string(),
+            },
             "total_supply" | "totalSupply" => {
                 format!("{}", (hash[0] as u64 + hash[1] as u64) * 100_000)
             }
@@ -767,10 +765,7 @@ mod tests {
         let mut sim = NetworkSimulator::new();
         let account = sim.create_account(100.0);
         sim.fund_account(&account.public_key, 50.0).unwrap();
-        assert_eq!(
-            sim.get_account(&account.public_key).unwrap().balance,
-            150.0
-        );
+        assert_eq!(sim.get_account(&account.public_key).unwrap().balance, 150.0);
     }
 
     #[test]
@@ -793,7 +788,9 @@ mod tests {
     fn deploy_contract_auto_registers_wasm() {
         let mut sim = NetworkSimulator::new();
         let account = sim.create_account(1000.0);
-        let contract = sim.deploy_contract("fake_hash_123", &account.public_key).unwrap();
+        let contract = sim
+            .deploy_contract("fake_hash_123", &account.public_key)
+            .unwrap();
         assert!(contract.contract_id.starts_with('C'));
     }
 
@@ -818,17 +815,10 @@ mod tests {
     fn simulate_invoke_returns_expected() {
         let mut sim = NetworkSimulator::new();
         let account = sim.create_account(1000.0);
-        let contract = sim
-            .deploy_contract("wh", &account.public_key)
-            .unwrap();
+        let contract = sim.deploy_contract("wh", &account.public_key).unwrap();
 
         let result = sim
-            .simulate_invoke(
-                &contract.contract_id,
-                "increment",
-                &[],
-                &account.public_key,
-            )
+            .simulate_invoke(&contract.contract_id, "increment", &[], &account.public_key)
             .unwrap();
         assert!(result.success);
         assert!(result.fee_stroops > 0);
@@ -839,9 +829,7 @@ mod tests {
     fn submit_invoke_creates_receipt() {
         let mut sim = NetworkSimulator::new();
         let account = sim.create_account(1000.0);
-        let contract = sim
-            .deploy_contract("wh", &account.public_key)
-            .unwrap();
+        let contract = sim.deploy_contract("wh", &account.public_key).unwrap();
         let cid = &contract.contract_id;
 
         let receipt = sim
@@ -857,20 +845,12 @@ mod tests {
     fn submit_invoke_reduces_balance() {
         let mut sim = NetworkSimulator::new();
         let account = sim.create_account(1000.0);
-        let contract = sim
-            .deploy_contract("wh", &account.public_key)
-            .unwrap();
+        let contract = sim.deploy_contract("wh", &account.public_key).unwrap();
         let pk = &account.public_key;
 
         let balance_before = sim.get_account(pk).unwrap().balance;
-        sim.submit_invoke(
-            &contract.contract_id,
-            "increment",
-            &[],
-            pk,
-            100_000,
-        )
-        .unwrap();
+        sim.submit_invoke(&contract.contract_id, "increment", &[], pk, 100_000)
+            .unwrap();
         let balance_after = sim.get_account(pk).unwrap().balance;
         assert!(balance_after < balance_before);
     }
@@ -902,9 +882,7 @@ mod tests {
     fn take_and_restore_snapshot() {
         let mut sim = NetworkSimulator::new();
         let account = sim.create_account(100.0);
-        let contract = sim
-            .deploy_contract("wh", &account.public_key)
-            .unwrap();
+        let contract = sim.deploy_contract("wh", &account.public_key).unwrap();
         sim.write_contract_storage(&contract.contract_id, "key", "value")
             .unwrap();
 
@@ -928,24 +906,16 @@ mod tests {
     fn failure_injection_in_process() {
         let mut sim = NetworkSimulator::new().with_failure_injection();
         let account = sim.create_account(1000.0);
-        let contract = sim
-            .deploy_contract("wh", &account.public_key)
-            .unwrap();
+        let contract = sim.deploy_contract("wh", &account.public_key).unwrap();
 
         // Add a failure rule that always fires.
-        sim.failure_injector.add_rule(
-            crate::utils::network_simulator::failure::FailureRule::new(
+        sim.failure_injector
+            .add_rule(crate::utils::network_simulator::failure::FailureRule::new(
                 "always-fail",
                 FailureMode::InsufficientFee,
-            ),
-        );
+            ));
 
-        let result = sim.simulate_invoke(
-            &contract.contract_id,
-            "test",
-            &[],
-            &account.public_key,
-        );
+        let result = sim.simulate_invoke(&contract.contract_id, "test", &[], &account.public_key);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Insufficient fee"));
     }
@@ -960,7 +930,11 @@ mod tests {
                 .unwrap();
             let snap_id = sim.take_snapshot("check");
             let snap = sim.snapshot_manager.load(&snap_id).unwrap().clone();
-            (snap.ledger_info.sequence, snap.accounts.len(), snap.contracts.len())
+            (
+                snap.ledger_info.sequence,
+                snap.accounts.len(),
+                snap.contracts.len(),
+            )
         };
 
         assert_eq!(check(42), check(42));

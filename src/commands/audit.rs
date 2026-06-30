@@ -112,11 +112,7 @@ pub async fn handle(args: AuditArgs) -> Result<()> {
             }
             Err(e) => {
                 if !args.quiet {
-                    eprintln!(
-                        "  {} cargo-audit skipped: {}",
-                        "⚠".yellow(),
-                        e
-                    );
+                    eprintln!("  {} cargo-audit skipped: {}", "⚠".yellow(), e);
                 }
             }
         }

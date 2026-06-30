@@ -4,9 +4,9 @@ use rustyline::completion::{Completer, Pair};
 use rustyline::error::ReadlineError;
 use rustyline::highlight::Highlighter;
 use rustyline::hint::Hinter;
+use rustyline::history::History;
 use rustyline::validate::Validator;
 use rustyline::{Context, Editor, Helper};
-use rustyline::history::History;
 use std::collections::HashSet;
 use std::fs;
 use std::path::PathBuf;
@@ -121,13 +121,19 @@ where
                 } else if let Some(term) = rest.strip_prefix("search ") {
                     self.search_history(&editor, term.trim());
                 } else {
-                    eprintln!("  {} Usage: :history [list|search <term>]", "✗".red().bold());
+                    eprintln!(
+                        "  {} Usage: :history [list|search <term>]",
+                        "✗".red().bold()
+                    );
                 }
                 continue;
             }
 
             if line.starts_with(":state") {
-                let key = line.strip_prefix(":state").map(|s| s.trim()).filter(|s| !s.is_empty());
+                let key = line
+                    .strip_prefix(":state")
+                    .map(|s| s.trim())
+                    .filter(|s| !s.is_empty());
                 match self.runner.inspect_state(key) {
                     Ok(out) => println!("{}", out),
                     Err(e) => eprintln!("  {} {}", "✗".red().bold(), e),
@@ -159,7 +165,10 @@ where
             if let Some(rest) = line.strip_prefix(":simulate ") {
                 let rest = rest.trim();
                 if rest.is_empty() {
-                    eprintln!("  {} Usage: :simulate fn(arg1, arg2, ...)", "✗".red().bold());
+                    eprintln!(
+                        "  {} Usage: :simulate fn(arg1, arg2, ...)",
+                        "✗".red().bold()
+                    );
                 } else {
                     match parse_invocation(rest) {
                         Ok((function, args)) => match self.runner.run_simulate(&function, &args) {
@@ -196,7 +205,10 @@ where
             }
 
             if line.starts_with(":breakpoint ") {
-                let fn_name = line.strip_prefix(":breakpoint ").map(|s| s.trim()).unwrap_or("");
+                let fn_name = line
+                    .strip_prefix(":breakpoint ")
+                    .map(|s| s.trim())
+                    .unwrap_or("");
                 if fn_name.is_empty() {
                     eprintln!("  {} Usage: :breakpoint <function_name>", "✗".red().bold());
                 } else {
@@ -270,7 +282,12 @@ where
         for (i, entry) in entries.iter().enumerate() {
             let line = entry.trim();
             if !line.is_empty() {
-                println!("  {num:>width$}  {entry}", num = i + 1, width = max_width, entry = line);
+                println!(
+                    "  {num:>width$}  {entry}",
+                    num = i + 1,
+                    width = max_width,
+                    entry = line
+                );
             }
         }
     }
@@ -294,7 +311,12 @@ where
         }
         let max_width = (entries.len()).to_string().len();
         for (i, entry) in &matches {
-            println!("  {num:>width$}  {entry}", num = i + 1, width = max_width, entry = entry);
+            println!(
+                "  {num:>width$}  {entry}",
+                num = i + 1,
+                width = max_width,
+                entry = entry
+            );
         }
     }
 
@@ -418,8 +440,6 @@ impl Highlighter for StarForgeHelper {
 
         std::borrow::Cow::Borrowed(line)
     }
-
-
 }
 
 fn highlight_args(input: &str) -> String {

@@ -279,8 +279,7 @@ impl TestnetClient {
         {
             Ok(response) => {
                 let text = response.into_string()?;
-                let parsed: serde_json::Value =
-                    serde_json::from_str(&text).unwrap_or_default();
+                let parsed: serde_json::Value = serde_json::from_str(&text).unwrap_or_default();
                 Ok(FundbotResult {
                     address: address.to_string(),
                     success: true,
@@ -302,8 +301,11 @@ impl TestnetClient {
 
     /// Query the latest ledger sequence number.
     pub fn latest_ledger(&self) -> Result<u32> {
-        let result =
-            rpc_post(self.config.network.rpc_url(), "getLatestLedger", serde_json::json!(null))?;
+        let result = rpc_post(
+            self.config.network.rpc_url(),
+            "getLatestLedger",
+            serde_json::json!(null),
+        )?;
         result
             .get("sequence")
             .and_then(|v| v.as_u64())
@@ -325,11 +327,7 @@ impl TestnetClient {
                 "args": args,
             }
         });
-        rpc_post(
-            self.config.network.rpc_url(),
-            "simulateTransaction",
-            params,
-        )
+        rpc_post(self.config.network.rpc_url(), "simulateTransaction", params)
     }
 
     /// Query ledger entries by key XDR strings.
@@ -337,11 +335,7 @@ impl TestnetClient {
         let params = serde_json::json!({
             "keys": key_xdrs
         });
-        let result = rpc_post(
-            self.config.network.rpc_url(),
-            "getLedgerEntries",
-            params,
-        )?;
+        let result = rpc_post(self.config.network.rpc_url(), "getLedgerEntries", params)?;
 
         let entries = result
             .get("entries")
@@ -540,7 +534,9 @@ mod tests {
     #[test]
     fn network_rpc_urls() {
         assert!(SorobanNetwork::Testnet.rpc_url().starts_with("https://"));
-        assert!(SorobanNetwork::Local.rpc_url().starts_with("http://localhost"));
+        assert!(SorobanNetwork::Local
+            .rpc_url()
+            .starts_with("http://localhost"));
         assert!(SorobanNetwork::Testnet.supports_friendbot());
         assert!(!SorobanNetwork::Mainnet.supports_friendbot());
     }

@@ -447,11 +447,17 @@ pub async fn handle(cmd: WalletCommands) -> Result<()> {
 fn parse_duration(input: &str) -> Result<std::time::Duration> {
     let trimmed = input.trim().to_lowercase();
     if trimmed.ends_with("ms") {
-        let value: u64 = trimmed.trim_end_matches("ms").parse().context("Invalid timeout")?;
+        let value: u64 = trimmed
+            .trim_end_matches("ms")
+            .parse()
+            .context("Invalid timeout")?;
         return Ok(std::time::Duration::from_millis(value));
     }
     if trimmed.ends_with('s') {
-        let value: u64 = trimmed.trim_end_matches('s').parse().context("Invalid timeout")?;
+        let value: u64 = trimmed
+            .trim_end_matches('s')
+            .parse()
+            .context("Invalid timeout")?;
         return Ok(std::time::Duration::from_secs(value));
     }
     anyhow::bail!("Invalid timeout '{}'. Use values like 1s or 500ms.", input)
@@ -460,11 +466,7 @@ fn parse_duration(input: &str) -> Result<std::time::Duration> {
 fn connect_hardware(device: hardware_wallet::HardwareWalletKind, timeout: &str) -> Result<()> {
     let timeout_duration = parse_duration(timeout)?;
     p::header("Hardware Wallet — Connect");
-    p::step(
-        1,
-        3,
-        &format!("Initializing HID subsystem for {}…", device),
-    );
+    p::step(1, 3, &format!("Initializing HID subsystem for {}…", device));
     let info = hardware_wallet::connect_with_timeout(device, timeout_duration)
         .map_err(|err| hardware_wallet::map_signing_error(err, device))?;
     p::step(
@@ -517,8 +519,13 @@ fn sign_message(
     if let Some(kind) = hardware {
         p::kv("Signer", &format!("{:?}", kind));
         let passphrase = config::get_network_passphrase("testnet");
-        let sig = hardware_wallet::sign_transaction(kind, hardware_wallet::STELLAR_HD_PATH, msg_bytes, &passphrase)
-            .map_err(|err| hardware_wallet::map_signing_error(err, kind))?;
+        let sig = hardware_wallet::sign_transaction(
+            kind,
+            hardware_wallet::STELLAR_HD_PATH,
+            msg_bytes,
+            &passphrase,
+        )
+        .map_err(|err| hardware_wallet::map_signing_error(err, kind))?;
         p::separator();
         p::kv_accent("Message", &message);
         p::kv("Signature (hex)", &hex::encode(sig));
@@ -1506,7 +1513,10 @@ fn import_from_hardware(
     });
     config::save(&updated_cfg)?;
 
-    p::success(&format!("Wallet '{}' imported from {} hardware device", name, device));
+    p::success(&format!(
+        "Wallet '{}' imported from {} hardware device",
+        name, device
+    ));
     p::kv("HD Path", hd_path);
     p::info("This wallet is watch-only. Sign transactions with --hardware.");
     Ok(())
@@ -2024,9 +2034,9 @@ fn multisig_sign(
 
     if let Some(device) = hardware {
         let matching_signer = account.signers.iter().find(|signer| {
-            cfg.wallets.iter().any(|wallet| {
-                wallet.public_key == signer.public_key && wallet.secret_key.is_none()
-            })
+            cfg.wallets
+                .iter()
+                .any(|wallet| wallet.public_key == signer.public_key && wallet.secret_key.is_none())
         });
 
         let signer_key = if let Some(signer) = matching_signer {

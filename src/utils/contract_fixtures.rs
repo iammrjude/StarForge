@@ -379,7 +379,10 @@ pub fn token_fixture() -> ContractFixture {
 /// Builds a fixture for a multisig contract.
 pub fn multisig_fixture(required_signatures: u32) -> ContractFixture {
     let mut builder = FixtureBuilder::new("multisig")
-        .with_value("required_signatures", serde_json::json!(required_signatures))
+        .with_value(
+            "required_signatures",
+            serde_json::json!(required_signatures),
+        )
         .with_storage(StorageSeed {
             key: "signers".into(),
             value: serde_json::json!([]),

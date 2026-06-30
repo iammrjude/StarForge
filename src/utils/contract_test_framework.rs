@@ -126,11 +126,7 @@ pub struct TestCase {
 }
 
 impl TestCase {
-    pub fn new<F>(
-        name: impl Into<String>,
-        description: impl Into<String>,
-        func: F,
-    ) -> Self
+    pub fn new<F>(name: impl Into<String>, description: impl Into<String>, func: F) -> Self
     where
         F: Fn(&mut MockEnvironment) -> TestCaseResult + Send + Sync + 'static,
     {
@@ -224,9 +220,8 @@ impl FrameworkTestSuite {
         let suite_start = Instant::now();
 
         // Setup fixture
-        let fixture_ctx: Option<FixtureContext> = self.fixture.as_mut().and_then(|f| {
-            f.setup().ok().map(|ctx| ctx.clone())
-        });
+        let fixture_ctx: Option<FixtureContext> =
+            self.fixture.as_mut().and_then(|f| f.setup().ok().cloned());
 
         let mut results = Vec::new();
         for case in &self.cases {
@@ -243,8 +238,9 @@ impl FrameworkTestSuite {
                         seed.value.clone(),
                     );
                 }
-                for (_, account) in &ctx.accounts {
-                    env.auth.auto_approve(MockAddress::new(account.address.clone()));
+                for account in ctx.accounts.values() {
+                    env.auth
+                        .auto_approve(MockAddress::new(account.address.clone()));
                 }
             }
 
@@ -421,10 +417,7 @@ impl FrameworkRunResult {
     }
 
     pub fn print_summary(&self) {
-        println!(
-            "\n=== {} ===",
-            self.config_name
-        );
+        println!("\n=== {} ===", self.config_name);
         println!(
             "Tests: {}/{} passed ({} failed) in {}ms",
             self.passed, self.total, self.failed, self.total_duration_ms
@@ -620,8 +613,7 @@ pub fn counter_test_suite() -> FrameworkTestSuite {
     use crate::utils::contract_fixtures::counter_fixture;
     use crate::utils::contract_mocks::{counter_env, MockAddress};
 
-    let mut suite =
-        FrameworkTestSuite::new("counter").with_fixture(counter_fixture());
+    let mut suite = FrameworkTestSuite::new("counter").with_fixture(counter_fixture());
 
     suite.add_case(TestCase::new(
         "initial_count_is_zero",
@@ -633,7 +625,11 @@ pub fn counter_test_suite() -> FrameworkTestSuite {
                 .finish();
             let passed = suite.all_passed();
             if passed {
-                TestCaseResult::pass("initial_count_is_zero", suite, start.elapsed().as_millis() as u64)
+                TestCaseResult::pass(
+                    "initial_count_is_zero",
+                    suite,
+                    start.elapsed().as_millis() as u64,
+                )
             } else {
                 TestCaseResult::fail(
                     "initial_count_is_zero",
@@ -662,7 +658,11 @@ pub fn counter_test_suite() -> FrameworkTestSuite {
             suite.push(assert_return_value(&result, &serde_json::json!(1u64)));
             let passed = suite.all_passed();
             if passed {
-                TestCaseResult::pass("increment_returns_new_count", suite, start.elapsed().as_millis() as u64)
+                TestCaseResult::pass(
+                    "increment_returns_new_count",
+                    suite,
+                    start.elapsed().as_millis() as u64,
+                )
             } else {
                 TestCaseResult::fail(
                     "increment_returns_new_count",
@@ -681,13 +681,16 @@ pub fn counter_test_suite() -> FrameworkTestSuite {
             let start = Instant::now();
             let client = MockContractClient::new(MockAddress::contract(1));
             client.mock_error("increment", "unauthorized");
-            let result =
-                client.invoke("increment", vec![], None, env.ledger.sequence);
+            let result = client.invoke("increment", vec![], None, env.ledger.sequence);
             let mut suite = AssertionSuite::new();
             suite.push(assert_error_contains(&result, "unauthorized"));
             let passed = suite.all_passed();
             if passed {
-                TestCaseResult::pass("unauthorised_increment_fails", suite, start.elapsed().as_millis() as u64)
+                TestCaseResult::pass(
+                    "unauthorised_increment_fails",
+                    suite,
+                    start.elapsed().as_millis() as u64,
+                )
             } else {
                 TestCaseResult::fail(
                     "unauthorised_increment_fails",
@@ -707,8 +710,7 @@ pub fn token_test_suite() -> FrameworkTestSuite {
     use crate::utils::contract_fixtures::token_fixture;
     use crate::utils::contract_mocks::{MockAddress, MockContractClient};
 
-    let mut suite =
-        FrameworkTestSuite::new("token").with_fixture(token_fixture());
+    let mut suite = FrameworkTestSuite::new("token").with_fixture(token_fixture());
 
     suite.add_case(TestCase::new(
         "initial_supply_zero",
@@ -723,7 +725,11 @@ pub fn token_test_suite() -> FrameworkTestSuite {
                 .finish();
             let passed = suite.all_passed();
             if passed {
-                TestCaseResult::pass("initial_supply_zero", suite, start.elapsed().as_millis() as u64)
+                TestCaseResult::pass(
+                    "initial_supply_zero",
+                    suite,
+                    start.elapsed().as_millis() as u64,
+                )
             } else {
                 TestCaseResult::fail(
                     "initial_supply_zero",
@@ -748,7 +754,11 @@ pub fn token_test_suite() -> FrameworkTestSuite {
             let suite = ContractAssertions::new(env).event_emitted("mint").finish();
             let passed = suite.all_passed();
             if passed {
-                TestCaseResult::pass("mint_emits_event", suite, start.elapsed().as_millis() as u64)
+                TestCaseResult::pass(
+                    "mint_emits_event",
+                    suite,
+                    start.elapsed().as_millis() as u64,
+                )
             } else {
                 TestCaseResult::fail(
                     "mint_emits_event",
@@ -772,7 +782,11 @@ pub fn token_test_suite() -> FrameworkTestSuite {
             suite.push(assert_error_contains(&result, "not authorized"));
             let passed = suite.all_passed();
             if passed {
-                TestCaseResult::pass("unauthorised_mint_fails", suite, start.elapsed().as_millis() as u64)
+                TestCaseResult::pass(
+                    "unauthorised_mint_fails",
+                    suite,
+                    start.elapsed().as_millis() as u64,
+                )
             } else {
                 TestCaseResult::fail(
                     "unauthorised_mint_fails",
@@ -801,7 +815,11 @@ pub fn token_test_suite() -> FrameworkTestSuite {
                 .finish();
             let passed = suite.all_passed();
             if passed {
-                TestCaseResult::pass("transfer_no_extra_events", suite, start.elapsed().as_millis() as u64)
+                TestCaseResult::pass(
+                    "transfer_no_extra_events",
+                    suite,
+                    start.elapsed().as_millis() as u64,
+                )
             } else {
                 TestCaseResult::fail(
                     "transfer_no_extra_events",

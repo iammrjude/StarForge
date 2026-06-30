@@ -102,7 +102,7 @@ fn parse_spec_entries(entries: &[ScSpecEntry]) -> ContractMetadata {
     let mut functions = Vec::new();
     let mut structs = Vec::new();
     let mut enums = Vec::new();
-    let mut events = Vec::new();
+    let events = Vec::new();
 
     for entry in entries {
         match entry {
@@ -117,7 +117,6 @@ fn parse_spec_entries(entries: &[ScSpecEntry]) -> ContractMetadata {
             }
             ScSpecEntry::UdtUnionV0(_) => {}
             ScSpecEntry::UdtErrorEnumV0(_) => {}
-            _ => {}
         }
     }
 
@@ -166,7 +165,7 @@ fn contract_enum(udt: &ScSpecUdtEnumV0) -> ContractEnum {
             .iter()
             .map(|case| ContractVariant {
                 name: case.name.to_string(),
-                type_name: case.type_.as_ref().map(spec_type_name),
+                type_name: None,
             })
             .collect(),
     }
@@ -439,7 +438,7 @@ fn generate_typescript(metadata: &ContractMetadata) -> String {
                 out.push_str(&format!("\t{} |\n", variant_type));
             }
         }
-        out.push_str("\n");
+        out.push('\n');
     }
 
     out
@@ -515,7 +514,7 @@ fn generate_python(metadata: &ContractMetadata) -> String {
         ));
     }
 
-    out.push_str("\n");
+    out.push('\n');
 
     for struct_def in &metadata.structs {
         let struct_name = pascal_case(&struct_def.name);
@@ -525,7 +524,7 @@ fn generate_python(metadata: &ContractMetadata) -> String {
             let py_ty = python_type(&field.type_name);
             out.push_str(&format!("    {}: {}\n", field_name, py_ty));
         }
-        out.push_str("\n");
+        out.push('\n');
     }
 
     out
@@ -566,13 +565,7 @@ fn generate_go(metadata: &ContractMetadata) -> String {
         let params = function
             .inputs
             .iter()
-            .map(|input| {
-                format!(
-                    "{} {}",
-                    pascal_case(&input.name),
-                    go_type(&input.type_name)
-                )
-            })
+            .map(|input| format!("{} {}", pascal_case(&input.name), go_type(&input.type_name)))
             .collect::<Vec<_>>()
             .join(", ");
         out.push_str(&format!(

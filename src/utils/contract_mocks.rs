@@ -12,10 +12,7 @@ impl MockAddress {
     }
 
     pub fn account(id: u32) -> Self {
-        Self(format!(
-            "GA{:055}",
-            id
-        ))
+        Self(format!("GA{:055}", id))
     }
 
     pub fn contract(id: u32) -> Self {
@@ -308,10 +305,7 @@ impl MockTokenBalances {
     ) -> Result<(), String> {
         let from_bal = self.get(token, from);
         if from_bal < amount {
-            return Err(format!(
-                "Insufficient balance: {} < {}",
-                from_bal, amount
-            ));
+            return Err(format!("Insufficient balance: {} < {}", from_bal, amount));
         }
         *self
             .balances
@@ -472,8 +466,7 @@ impl MockEnvironment {
 
     /// Register a mock contract client with the environment.
     pub fn register_contract(&mut self, client: MockContractClient) {
-        self.clients
-            .insert(client.address.0.clone(), client);
+        self.clients.insert(client.address.0.clone(), client);
     }
 
     /// Look up a registered mock client.
@@ -522,10 +515,8 @@ pub fn counter_env() -> MockEnvironment {
     client.mock_return("increment", serde_json::json!(1u64));
     client.mock_return("reset", serde_json::Value::Null);
 
-    env.storage.set(
-        StorageKey::instance("count"),
-        serde_json::json!(0u64),
-    );
+    env.storage
+        .set(StorageKey::instance("count"), serde_json::json!(0u64));
     env.auth.auto_approve(MockAddress::account(1));
     env.register_contract(client);
     env
@@ -551,12 +542,9 @@ pub fn token_env(initial_supply: i128) -> MockEnvironment {
         StorageKey::persistent("total_supply"),
         serde_json::json!(initial_supply),
     );
-    env.storage.set(
-        StorageKey::instance("decimals"),
-        serde_json::json!(7u32),
-    );
-    env.balances
-        .mint(&token_addr.0, &admin.0, initial_supply);
+    env.storage
+        .set(StorageKey::instance("decimals"), serde_json::json!(7u32));
+    env.balances.mint(&token_addr.0, &admin.0, initial_supply);
     env.auth.auto_approve(admin.clone());
     env.auth.auto_approve(user_a);
     env.register_contract(client);
@@ -630,12 +618,7 @@ mod tests {
     fn mock_contract_client_records_calls() {
         let client = MockContractClient::new(MockAddress::contract(1));
         client.mock_return("increment", serde_json::json!(1u64));
-        let result = client.invoke(
-            "increment",
-            vec![],
-            Some(MockAddress::account(1)),
-            100,
-        );
+        let result = client.invoke("increment", vec![], Some(MockAddress::account(1)), 100);
         assert_eq!(result.unwrap(), serde_json::json!(1u64));
         assert_eq!(client.call_count("increment"), 1);
     }
@@ -665,7 +648,8 @@ mod tests {
     fn token_env_factory() {
         let env = token_env(1_000_000);
         assert_eq!(
-            env.balances.get(&MockAddress::contract(10).0, &MockAddress::account(10).0),
+            env.balances
+                .get(&MockAddress::contract(10).0, &MockAddress::account(10).0),
             1_000_000
         );
         let client = env.contract(&MockAddress::contract(10)).unwrap();

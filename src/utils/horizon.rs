@@ -107,16 +107,6 @@ pub async fn fetch_account(public_key: &str, network: &str) -> Result<AccountRes
         let account: AccountResponse = res
             .into_json()
             .with_context(|| "Failed to parse account response from Horizon")?;
-    let res = HTTP_CLIENT
-        .get(&url)
-        .send()
-        .await
-        .with_context(|| format!("Failed to reach Horizon on {}", network))?;
-    if res.status() == 200 {
-        let account: AccountResponse = res
-            .json()
-            .await
-            .with_context(|| "Failed to parse account response")?;
         Ok(account)
     } else if res.status() == 404 {
         anyhow::bail!(

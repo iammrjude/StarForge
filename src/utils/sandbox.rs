@@ -45,11 +45,19 @@ impl LocalSorobanSandbox {
 
     pub fn debug_invoke(&self, function: &str, args: &[String]) -> Result<String> {
         let mut output = String::new();
-        output.push_str(&format!("  {} Debug invocation of '{}'\n", "🔍".bright_blue(), function));
+        output.push_str(&format!(
+            "  {} Debug invocation of '{}'\n",
+            "🔍".bright_blue(),
+            function
+        ));
         output.push_str(&format!("  {} Args: {:?}\n", "  └".dimmed(), args));
-        output.push_str(&format!("  {} WASM: {}\n", "  └".dimmed(), self.wasm_path.display()));
+        output.push_str(&format!(
+            "  {} WASM: {}\n",
+            "  └".dimmed(),
+            self.wasm_path.display()
+        ));
         output.push_str(&format!("  {} Network: {}\n", "  └".dimmed(), self.network));
-        output.push_str("\n");
+        output.push('\n');
 
         match self.invoke(function, args) {
             Ok(result) => {
@@ -84,10 +92,7 @@ impl LocalSorobanSandbox {
 
     pub fn inspect_storage(&self, key: &str) -> Result<String> {
         let mut cmd = Command::new("stellar");
-        cmd.arg("contract")
-            .arg("inspect")
-            .arg("--key")
-            .arg(key);
+        cmd.arg("contract").arg("inspect").arg("--key").arg(key);
         let out = cmd
             .output()
             .with_context(|| "Failed to inspect contract storage")?;
@@ -209,9 +214,7 @@ impl LocalSorobanSandbox {
             }
         }
 
-        let out = cmd
-            .output()
-            .with_context(|| "Failed to run simulation")?;
+        let out = cmd.output().with_context(|| "Failed to run simulation")?;
 
         if !out.status.success() {
             let stderr = String::from_utf8_lossy(&out.stderr);
@@ -235,11 +238,7 @@ impl LocalSorobanSandbox {
                     ));
                 }
                 if let Some(mem) = cost.get("memory_bytes").and_then(|v| v.as_u64()) {
-                    result.push_str(&format!(
-                        "  {} Memory: {} bytes\n",
-                        "  ├".dimmed(),
-                        mem
-                    ));
+                    result.push_str(&format!("  {} Memory: {} bytes\n", "  ├".dimmed(), mem));
                 }
             }
             if let Some(result_val) = json.get("result") {
@@ -302,7 +301,10 @@ impl LocalSorobanSandbox {
         let raw = String::from_utf8_lossy(&out.stdout).trim().to_string();
 
         let mut result = String::new();
-        result.push_str(&format!("  {} Docker Simulation Results\n", "📋".bright_cyan()));
+        result.push_str(&format!(
+            "  {} Docker Simulation Results\n",
+            "📋".bright_cyan()
+        ));
         result.push_str(&format!("  {} Function: {}\n", "  ├".dimmed(), function));
         result.push_str(&format!("  {} Args: {:?}\n", "  ├".dimmed(), args));
 

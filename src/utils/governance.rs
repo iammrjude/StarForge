@@ -204,7 +204,8 @@ pub fn validate_wasm(path: &Path) -> Result<(Vec<u8>, String)> {
             path.display()
         );
     }
-    Ok((bytes, wasm_hash(&bytes)))
+    let hash = wasm_hash(&bytes);
+    Ok((bytes, hash))
 }
 
 // ── Audit trail ───────────────────────────────────────────────────────────────
@@ -399,10 +400,7 @@ pub fn cast_vote(
 
     let mut details = HashMap::new();
     details.insert("vote".to_string(), choice.to_string());
-    details.insert(
-        "votes_for".to_string(),
-        votes_for(proposal).to_string(),
-    );
+    details.insert("votes_for".to_string(), votes_for(proposal).to_string());
     details.insert(
         "votes_against".to_string(),
         votes_against(proposal).to_string(),
@@ -415,7 +413,12 @@ pub fn cast_vote(
             proposal.executed_at = Some(Utc::now().to_rfc3339());
             let mut emerg_details = HashMap::new();
             emerg_details.insert("emergency".to_string(), "true".to_string());
-            record_audit(proposal_id, "emergency_quorum_reached", "system", emerg_details)?;
+            record_audit(
+                proposal_id,
+                "emergency_quorum_reached",
+                "system",
+                emerg_details,
+            )?;
         } else {
             let expires = Utc::now() + Duration::seconds(proposal.timelock_seconds as i64);
             proposal.timelock_expires_at = Some(expires.to_rfc3339());
@@ -477,8 +480,9 @@ pub fn get_proposal(proposal_id: &str, network: &str) -> Result<GovernancePropos
         .find(|p| p.id == proposal_id && p.network == network)
         .ok_or_else(|| anyhow::anyhow!("Proposal '{}' not found on {}", proposal_id, network))?;
     refresh_timelock_status(proposal);
+    let updated = proposal.clone();
     save_proposals(&proposals)?;
-    Ok(proposal.clone())
+    Ok(updated)
 }
 
 pub fn list_proposals(
@@ -567,7 +571,10 @@ pub fn emergency_upgrade(
         );
     }
     if !cfg.emergency_guardians.contains(&guardian) {
-        anyhow::bail!("Caller '{}' is not an authorized emergency guardian", guardian);
+        anyhow::bail!(
+            "Caller '{}' is not an authorized emergency guardian",
+            guardian
+        );
     }
 
     let (_, new_hash) = validate_wasm(&wasm_path)?;
@@ -578,12 +585,11 @@ pub fn emergency_upgrade(
         anyhow::bail!("Emergency proposal '{}' already exists", proposal_id);
     }
 
-    let mut emergency_votes = Vec::new();
-    emergency_votes.push(Vote {
+    let emergency_votes = vec![Vote {
         voter: guardian.clone(),
         choice: VoteChoice::For,
         voted_at: Utc::now().to_rfc3339(),
-    });
+    }];
 
     let quorum_met = cfg.emergency_quorum <= 1;
     let status = if quorum_met {
@@ -607,11 +613,7 @@ pub fn emergency_upgrade(
         status,
         network,
         created_at: now.clone(),
-        executed_at: if quorum_met {
-            Some(now)
-        } else {
-            None
-        },
+        executed_at: if quorum_met { Some(now) } else { None },
         is_emergency: true,
     };
 

@@ -1,4 +1,5 @@
 pub mod analytics;
+pub mod approval;
 pub mod audit;
 pub mod backup;
 pub mod benchmark;
@@ -31,7 +32,6 @@ pub mod plugin;
 pub mod registry;
 pub mod schedule;
 pub mod security;
-pub mod simulate;
 pub mod shell;
 pub mod simulate;
 pub mod social;

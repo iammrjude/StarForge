@@ -190,7 +190,9 @@ impl SnapshotManager {
 
     /// Export a snapshot to a JSON file at the given path.
     pub fn export_to_file(&self, id: &str, path: &Path) -> Result<(), String> {
-        let snapshot = self.load(id).ok_or_else(|| format!("Snapshot '{}' not found", id))?;
+        let snapshot = self
+            .load(id)
+            .ok_or_else(|| format!("Snapshot '{}' not found", id))?;
         let json = serde_json::to_string_pretty(snapshot)
             .map_err(|e| format!("Serialization error: {}", e))?;
         fs::write(path, json).map_err(|e| format!("Write error: {}", e))?;
@@ -351,8 +353,24 @@ mod tests {
         let mut mgr = SnapshotManager::new();
         let li = dummy_ledger_info();
 
-        mgr.take_snapshot("a", &li, &[], &[], &LedgerTime::genesis(), 0, HashMap::new());
-        mgr.take_snapshot("b", &li, &[], &[], &LedgerTime::genesis(), 0, HashMap::new());
+        mgr.take_snapshot(
+            "a",
+            &li,
+            &[],
+            &[],
+            &LedgerTime::genesis(),
+            0,
+            HashMap::new(),
+        );
+        mgr.take_snapshot(
+            "b",
+            &li,
+            &[],
+            &[],
+            &LedgerTime::genesis(),
+            0,
+            HashMap::new(),
+        );
         assert_eq!(mgr.len(), 2);
         mgr.clear();
         assert_eq!(mgr.len(), 0);

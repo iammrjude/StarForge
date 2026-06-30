@@ -6,7 +6,7 @@
 
 use crate::utils::network_simulator::{
     failure::{FailureMode, FailureRule},
-    scenarios::{BuiltInScenario, ScenarioRunner, ScenarioResult},
+    scenarios::{BuiltInScenario, ScenarioResult, ScenarioRunner},
     simulator::NetworkSimulator,
 };
 use crate::utils::print as p;
@@ -532,11 +532,11 @@ fn show_time() -> Result<()> {
     p::kv("Ledger Sequence", &tc.ledger_time.sequence.to_string());
     p::kv("Timestamp", &tc.current_time_string());
     p::kv("Unix Timestamp", &tc.ledger_time.timestamp.to_string());
-    p::kv("Close Interval", &format!("{}s", tc.ledger_time.close_seconds));
     p::kv(
-        "Frozen",
-        if tc.ledger_time.frozen { "yes" } else { "no" },
+        "Close Interval",
+        &format!("{}s", tc.ledger_time.close_seconds),
     );
+    p::kv("Frozen", if tc.ledger_time.frozen { "yes" } else { "no" });
 
     let save_points = tc.list_save_points();
     if !save_points.is_empty() {
@@ -605,8 +605,7 @@ fn restore_time(args: RestoreTimeArgs) -> Result<()> {
     if sim.time_controller.restore_point(&args.label).is_some() {
         p::success(&format!(
             "Restored time point '{}' (seq {})",
-            args.label,
-            sim.time_controller.ledger_time.sequence
+            args.label, sim.time_controller.ledger_time.sequence
         ));
     } else {
         anyhow::bail!("Time point '{}' not found", args.label);
@@ -750,8 +749,14 @@ fn show_status() -> Result<()> {
             status["ledger"]["protocol_version"].as_u64().unwrap_or(0)
         ),
     );
-    p::kv("Accounts", &status["accounts"].as_u64().unwrap_or(0).to_string());
-    p::kv("Contracts", &status["contracts"].as_u64().unwrap_or(0).to_string());
+    p::kv(
+        "Accounts",
+        &status["accounts"].as_u64().unwrap_or(0).to_string(),
+    );
+    p::kv(
+        "Contracts",
+        &status["contracts"].as_u64().unwrap_or(0).to_string(),
+    );
     p::kv(
         "Transactions",
         &status["transactions"].as_u64().unwrap_or(0).to_string(),
@@ -766,11 +771,19 @@ fn show_status() -> Result<()> {
     );
     p::kv(
         "  Frozen",
-        status["time"]["frozen"].as_bool().unwrap_or(false).to_string().as_str(),
+        status["time"]["frozen"]
+            .as_bool()
+            .unwrap_or(false)
+            .to_string()
+            .as_str(),
     );
     p::kv(
         "  Failure Injection",
-        status["failure_injection"].as_bool().unwrap_or(false).to_string().as_str(),
+        status["failure_injection"]
+            .as_bool()
+            .unwrap_or(false)
+            .to_string()
+            .as_str(),
     );
 
     if let Some(ref result) = *LAST_RESULT.lock().unwrap() {

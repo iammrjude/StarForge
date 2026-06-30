@@ -93,17 +93,11 @@ impl AssertionSuite {
     }
 
     pub fn passed(&self) -> usize {
-        self.results
-            .iter()
-            .filter(|r| r.is_passed())
-            .count()
+        self.results.iter().filter(|r| r.is_passed()).count()
     }
 
     pub fn failed(&self) -> usize {
-        self.results
-            .iter()
-            .filter(|r| !r.is_passed())
-            .count()
+        self.results.iter().filter(|r| !r.is_passed()).count()
     }
 
     pub fn total(&self) -> usize {
@@ -115,10 +109,7 @@ impl AssertionSuite {
     }
 
     pub fn failures(&self) -> Vec<&AssertionResult> {
-        self.results
-            .iter()
-            .filter(|r| !r.is_passed())
-            .collect()
+        self.results.iter().filter(|r| !r.is_passed()).collect()
     }
 
     pub fn merge(&mut self, other: AssertionSuite) {
@@ -128,12 +119,7 @@ impl AssertionSuite {
 
 impl fmt::Display for AssertionSuite {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(
-            f,
-            "Assertions: {}/{} passed",
-            self.passed(),
-            self.total()
-        )?;
+        writeln!(f, "Assertions: {}/{} passed", self.passed(), self.total())?;
         for result in &self.results {
             writeln!(f, "  {}", result)?;
         }
@@ -151,9 +137,7 @@ pub fn assert_storage_eq(
 ) -> AssertionResult {
     let name = format!("storage[{}/{}] == {}", key.scope, key.key, expected);
     match env.storage.get(key) {
-        Some(actual) if actual == expected => {
-            AssertionResult::pass(&name, "storage value matches")
-        }
+        Some(actual) if actual == expected => AssertionResult::pass(&name, "storage value matches"),
         Some(actual) => AssertionResult::fail(&name, "storage value mismatch")
             .with_expected(expected.to_string())
             .with_actual(actual.to_string())
@@ -198,10 +182,7 @@ pub fn assert_storage_numeric(
 ) -> AssertionResult {
     let name = format!(
         "storage[{}/{}] {} {}",
-        key.scope,
-        key.key,
-        comparator,
-        expected
+        key.scope, key.key, comparator, expected
     );
     let actual_val = match env.storage.get(key) {
         Some(v) => v,
@@ -213,11 +194,11 @@ pub fn assert_storage_numeric(
         }
     };
 
-    let actual = match actual_val.as_i64().map(i128::from).or_else(|| {
-        actual_val
-            .as_u64()
-            .map(|u| i128::from(u))
-    }) {
+    let actual = match actual_val
+        .as_i64()
+        .map(i128::from)
+        .or_else(|| actual_val.as_u64().map(|u| i128::from(u)))
+    {
         Some(n) => n,
         None => {
             return AssertionResult::fail(&name, "storage value is not numeric")
@@ -410,9 +391,7 @@ pub fn assert_return_value(
 ) -> AssertionResult {
     let name = format!("return value == {}", expected);
     match result {
-        Ok(actual) if actual == expected => {
-            AssertionResult::pass(&name, "return value matches")
-        }
+        Ok(actual) if actual == expected => AssertionResult::pass(&name, "return value matches"),
         Ok(actual) => AssertionResult::fail(&name, "return value mismatch")
             .with_expected(expected.to_string())
             .with_actual(actual.to_string()),
@@ -429,9 +408,7 @@ pub fn assert_error_contains(
 ) -> AssertionResult {
     let name = format!("error contains '{}'", substring);
     match result {
-        Err(e) if e.contains(substring) => {
-            AssertionResult::pass(&name, "error message matches")
-        }
+        Err(e) if e.contains(substring) => AssertionResult::pass(&name, "error message matches"),
         Err(e) => AssertionResult::fail(&name, "error message does not match")
             .with_expected(format!("contains '{}'", substring))
             .with_actual(e.clone()),
@@ -552,8 +529,7 @@ impl<'a> ContractAssertions<'a> {
     }
 
     pub fn ledger_gte(mut self, min_sequence: u32) -> Self {
-        self.suite
-            .push(assert_ledger_gte(self.env, min_sequence));
+        self.suite.push(assert_ledger_gte(self.env, min_sequence));
         self
     }
 
@@ -648,8 +624,7 @@ mod tests {
             vec![serde_json::json!("mint")],
             serde_json::json!({"amount": 1000}),
         );
-        let result =
-            assert_event_data(&env.events, "mint", "amount", &serde_json::json!(1000));
+        let result = assert_event_data(&env.events, "mint", "amount", &serde_json::json!(1000));
         assert!(result.is_passed());
     }
 

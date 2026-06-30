@@ -242,8 +242,11 @@ fn handle_propose(args: ProposeArgs) -> Result<()> {
 fn handle_list(args: ListArgs) -> Result<()> {
     p::header("Governance Proposals");
 
-    let proposals =
-        governance::list_proposals(Some(&args.network), args.contract_id.as_deref(), args.status.as_deref())?;
+    let proposals = governance::list_proposals(
+        Some(&args.network),
+        args.contract_id.as_deref(),
+        args.status.as_deref(),
+    )?;
 
     if args.json {
         println!("{}", serde_json::to_string_pretty(&proposals)?);
@@ -320,7 +323,7 @@ fn handle_vote(args: VoteArgs) -> Result<()> {
     p::kv("Vote", &choice_label);
     p::kv(
         "Tally",
-        format!(
+        &format!(
             "{} for / {} against (threshold: {})",
             governance::votes_for(&proposal),
             governance::votes_against(&proposal),
@@ -396,7 +399,8 @@ async fn handle_execute(args: ExecuteArgs) -> Result<()> {
         .await
         .map_err(|e| anyhow::anyhow!("Account not active on {}: {}", args.network, e))?;
 
-    let proposal = governance::execute_proposal(&args.proposal_id, &wallet.public_key, &args.network)?;
+    let proposal =
+        governance::execute_proposal(&args.proposal_id, &wallet.public_key, &args.network)?;
 
     println!();
     p::separator();
@@ -531,8 +535,14 @@ fn handle_config(cmd: ConfigCommands) -> Result<()> {
         ConfigCommands::Show => {
             p::header("Governance Configuration");
             let cfg = governance::load_config()?;
-            p::kv("Default timelock (seconds)", &cfg.default_timelock_seconds.to_string());
-            p::kv("Default threshold", &cfg.default_approval_threshold.to_string());
+            p::kv(
+                "Default timelock (seconds)",
+                &cfg.default_timelock_seconds.to_string(),
+            );
+            p::kv(
+                "Default threshold",
+                &cfg.default_approval_threshold.to_string(),
+            );
             p::kv("Emergency quorum", &cfg.emergency_quorum.to_string());
             if cfg.emergency_guardians.is_empty() {
                 p::kv("Emergency guardians", "(none configured)");
@@ -590,7 +600,10 @@ fn print_proposal_detail(proposal: &GovernanceProposal) {
     if let Some(expires) = &proposal.timelock_expires_at {
         p::kv("Timelock expires", expires);
         if let Some(remaining) = governance::timelock_remaining(proposal) {
-            p::kv("Time remaining", format!("{} hours", remaining.num_hours()));
+            p::kv(
+                "Time remaining",
+                &format!("{} hours", remaining.num_hours()),
+            );
         }
     }
     if proposal.is_emergency {
@@ -618,7 +631,10 @@ fn print_dashboard(summary: &DashboardSummary) {
     p::kv("Timelock ready", &summary.timelock_ready.to_string());
     p::kv("Executed", &summary.executed.to_string());
     p::kv("Rejected", &summary.rejected.to_string());
-    p::kv("Emergency executed", &summary.emergency_executed.to_string());
+    p::kv(
+        "Emergency executed",
+        &summary.emergency_executed.to_string(),
+    );
     println!();
 
     if !summary.recent_audit_entries.is_empty() {

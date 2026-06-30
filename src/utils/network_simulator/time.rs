@@ -181,8 +181,7 @@ impl TimeController {
 
     /// Get the current clock time as a human-readable string.
     pub fn current_time_string(&self) -> String {
-        let dt = DateTime::from_timestamp(self.ledger_time.timestamp, 0)
-            .unwrap_or_default();
+        let dt = DateTime::from_timestamp(self.ledger_time.timestamp, 0).unwrap_or_default();
         dt.format("%Y-%m-%d %H:%M:%S UTC").to_string()
     }
 }

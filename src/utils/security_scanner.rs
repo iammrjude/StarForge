@@ -93,11 +93,10 @@ fn parse_cargo_audit_output(json_str: &str) -> Result<Vec<VulnerabilityFinding>>
         kind: Option<String>,
     }
 
-    let report: AuditReport =
-        serde_json::from_str(json_str).unwrap_or(AuditReport {
-            vulnerabilities: None,
-            warnings: None,
-        });
+    let report: AuditReport = serde_json::from_str(json_str).unwrap_or(AuditReport {
+        vulnerabilities: None,
+        warnings: None,
+    });
 
     let mut findings = Vec::new();
 
@@ -119,15 +118,9 @@ fn parse_cargo_audit_output(json_str: &str) -> Result<Vec<VulnerabilityFinding>>
             title: vuln.advisory.title.clone(),
             severity: severity.to_string(),
             description: format!("{}{}", vuln.advisory.description, url_note),
-            location: Some(format!(
-                "{}@{}",
-                vuln.package.name, vuln.package.version
-            )),
+            location: Some(format!("{}@{}", vuln.package.name, vuln.package.version)),
             tool: "cargo-audit".to_string(),
-            remediation: cargo_audit_remediation(
-                &vuln.package.name,
-                &vuln.advisory.id,
-            ),
+            remediation: cargo_audit_remediation(&vuln.package.name, &vuln.advisory.id),
         });
     }
 

@@ -1,8 +1,11 @@
-use crate::utils::{config, confirmation, horizon, optimizer, print as p, soroban, wallet_signer};
+use crate::utils::deploy_history::{
+    self, last_successful, record_deployment, set_contract_id, update_status, DeployRecord,
+    DeployStatus,
+};
+use crate::utils::{config, confirmation, horizon, optimizer, print as p, soroban};
 use anyhow::Result;
 use clap::Args;
 use colored::*;
-use crate::utils::hardware_wallet::HardwareWalletKind;
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::PathBuf;
@@ -44,12 +47,24 @@ pub struct DeployArgs {
     /// deployment plan and exits. Implies --simulate.
     #[arg(long, default_value = "false")]
     pub dry_run: bool,
-    /// Sign deployment with a hardware wallet (Ledger/Trezor)
-    #[arg(long, value_enum)]
-    pub hardware: Option<HardwareWalletKind>,
-    /// HD derivation path for hardware wallet signing
-    #[arg(long, default_value = crate::utils::hardware_wallet::STELLAR_HD_PATH)]
-    pub hd_path: String,
+    /// Disable automatic rollback. By default, if an executed deployment fails
+    /// and a previous successful deployment exists on this network, StarForge
+    /// records a rollback to that version as a safety net.
+    #[arg(long, default_value = "false")]
+    pub no_auto_rollback: bool,
+}
+
+/// Extract the deployed contract id (a `C...` strkey) from the Stellar CLI's
+/// stdout. `stellar contract deploy` prints the 56-char contract id, typically
+/// on its own final line. Returns the first plausible contract id found.
+fn parse_contract_id_from_stdout(stdout: &str) -> Option<String> {
+    stdout
+        .split(|c: char| c.is_whitespace())
+        .map(|t| t.trim())
+        .find(|t| {
+            t.len() == 56 && t.starts_with('C') && t.chars().all(|c| c.is_ascii_alphanumeric())
+        })
+        .map(|t| t.to_string())
 }
 
 fn is_wasm_above_size_limit(wasm_size_kb: f64) -> bool {
@@ -376,14 +391,7 @@ pub async fn handle(args: DeployArgs) -> Result<()> {
     .add("Wallet", &wallet.name)
     .add("Public Key", &wallet.public_key)
     .add("Optimized", if args.optimize { "Yes" } else { "No" })
-    .add("Execute", if args.execute { "Yes" } else { "No (dry-run)" })
-    .add(
-        "Signer",
-        &match args.hardware {
-            Some(device) => format!("hardware ({})", device),
-            None => format!("local ({})", wallet.name),
-        },
-    );
+    .add("Execute", if args.execute { "Yes" } else { "No (dry-run)" });
 
     let confirm_config = confirmation::ConfirmationConfig {
         risk_level,
@@ -396,26 +404,6 @@ pub async fn handle(args: DeployArgs) -> Result<()> {
 
     if !confirmation::confirm_operation(&summary, &confirm_config)? {
         return Ok(());
-    }
-
-    if args.execute {
-        if let Some(device) = args.hardware {
-            let signing_request = wallet_signer::SigningRequest::from_options(
-                Some(wallet),
-                Some(device),
-                Some(&args.hd_path),
-                &args.network,
-                args.yes,
-                "contract deployment",
-            )?;
-            soroban::sign_deploy_transaction(&wasm_hash, wallet, &args.network, &signing_request)?;
-            p::success(&format!("Deployment transaction signed on {}", device));
-        } else if wallet.secret_key.is_none() {
-            anyhow::bail!(
-                "Wallet '{}' has no local secret key. Use --hardware ledger or --hardware trezor for deployment.",
-                wallet.name
-            );
-        }
     }
 
     println!();

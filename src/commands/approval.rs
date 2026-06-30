@@ -313,14 +313,7 @@ fn handle_show_workflow(args: ShowWorkflowArgs) -> Result<()> {
     p::kv_accent("ID", &workflow.id);
     p::kv("Name", &workflow.name);
     p::kv("Description", &workflow.description);
-    p::kv(
-        "Active",
-        if workflow.active {
-            "yes".green().to_string()
-        } else {
-            "no".red().to_string()
-        },
-    );
+    p::kv("Active", if workflow.active { "yes" } else { "no" });
     p::kv(
         "Created",
         &workflow
@@ -348,21 +341,17 @@ fn handle_show_workflow(args: ShowWorkflowArgs) -> Result<()> {
         println!("    {} {}", "Name:        ".dimmed(), level.name.white());
         println!("    {} {}", "Description: ".dimmed(), level.description);
         println!(
-            "    {} {}",
+            "    {} {} approver(s)",
             "Required:    ".dimmed(),
-            format!("{} approver(s)", level.required_approvers)
+            level.required_approvers
         );
         println!(
-            "    {} {}",
+            "    {} {:?}",
             "Roles:       ".dimmed(),
-            format!("{:?}", level.approver_roles)
+            level.approver_roles
         );
         if let Some(timeout) = level.timeout_hours {
-            println!(
-                "    {} {}",
-                "Timeout:     ".dimmed(),
-                format!("{} hours", timeout)
-            );
+            println!("    {} {} hours", "Timeout:     ".dimmed(), timeout);
         }
     }
     println!();
@@ -421,7 +410,7 @@ fn handle_create_request(args: CreateRequestArgs) -> Result<()> {
     p::kv("Network", &request.network);
     p::kv("Description", &request.description);
     p::kv("Requested by", &request.requested_by);
-    p::kv("Status", request.status.to_string());
+    p::kv("Status", &request.status.to_string());
     p::kv("Current level", &workflow.levels[0].name);
     println!();
 
@@ -529,7 +518,7 @@ fn handle_show_request(args: ShowRequestArgs) -> Result<()> {
     p::kv("Network", &request.network);
     p::kv("Description", &request.description);
     p::kv("Requested by", &request.requested_by);
-    p::kv("Status", request.status.to_string());
+    p::kv("Status", &request.status.to_string());
     p::kv("Level progress", &request.level_progress());
     p::kv(
         "Created",
@@ -661,7 +650,7 @@ fn handle_approve_request(args: ApproveRequestArgs) -> Result<()> {
     println!();
     p::kv_accent("Request ID", &result.id);
     p::kv("Approved by", &args.approver);
-    p::kv("Status", result.status.to_string());
+    p::kv("Status", &result.status.to_string());
     p::kv("Level progress", &result.level_progress());
 
     if result.status == ApprovalStatus::Approved {
@@ -688,7 +677,7 @@ fn handle_reject_request(args: RejectRequestArgs) -> Result<()> {
     p::kv_accent("Request ID", &result.id);
     p::kv("Rejected by", &args.approver);
     p::kv("Reason", &args.reason);
-    p::kv("Status", result.status.to_string());
+    p::kv("Status", &result.status.to_string());
     p::success("Request rejected");
     Ok(())
 }
@@ -702,7 +691,7 @@ fn handle_cancel_request(args: CancelRequestArgs) -> Result<()> {
     p::kv_accent("Request ID", &result.id);
     p::kv("Cancelled by", &args.cancelled_by);
     p::kv("Reason", &args.reason);
-    p::kv("Status", result.status.to_string());
+    p::kv("Status", &result.status.to_string());
     p::success("Request cancelled");
     Ok(())
 }

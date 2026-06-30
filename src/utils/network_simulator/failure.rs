@@ -9,7 +9,7 @@ use std::collections::HashMap;
 // ── Failure Modes ─────────────────────────────────────────────────────────────
 
 /// All possible failure modes the simulator can inject.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum FailureMode {
     /// Simulate an RPC timeout (no response).
     RpcTimeout,
@@ -152,8 +152,7 @@ impl FailureRule {
 
     /// Create a pre-defined "contract panic" rule.
     pub fn contract_panic(contract_id: &str) -> Self {
-        Self::new("contract-panic", FailureMode::ContractPanic)
-            .with_contract(contract_id)
+        Self::new("contract-panic", FailureMode::ContractPanic).with_contract(contract_id)
     }
 
     /// Create a pre-defined "insufficient fee" rule.
@@ -228,7 +227,7 @@ impl FailureInjector {
 
         for rule in &mut self.rules {
             if rule.should_fire(rpc_method, contract_id, account, rng_probability) {
-                return Some(rule.mode);
+                return Some(rule.mode.clone());
             }
         }
 
@@ -240,9 +239,9 @@ impl FailureInjector {
         if self.rules.is_empty() {
             return true;
         }
-        self.rules.iter().all(|r| {
-            r.max_activations > 0 && r.times_fired >= r.max_activations
-        })
+        self.rules
+            .iter()
+            .all(|r| r.max_activations > 0 && r.times_fired >= r.max_activations)
     }
 
     /// Reset all rule counters.
@@ -268,40 +267,20 @@ impl Default for FailureInjector {
 pub fn failure_to_rpc_error(mode: &FailureMode) -> (i64, String) {
     match mode {
         FailureMode::RpcTimeout => (-32000, "RPC request timed out".to_string()),
-        FailureMode::RpcConnectionRefused => {
-            (-32001, "RPC connection refused".to_string())
-        }
+        FailureMode::RpcConnectionRefused => (-32001, "RPC connection refused".to_string()),
         FailureMode::RpcError { code } => (*code, format!("RPC error (code {})", code)),
-        FailureMode::InsufficientFee => {
-            (-32002, "Insufficient fee for transaction".to_string())
-        }
-        FailureMode::BadAuth => {
-            (-32003, "Bad authorization for transaction".to_string())
-        }
-        FailureMode::ContractPanic => {
-            (-32010, "Contract invocation panicked".to_string())
-        }
-        FailureMode::ContractError { code, message } => {
-            (-32010 - *code as i64, message.clone())
-        }
-        FailureMode::AccountNotFound => {
-            (-32004, "Account not found".to_string())
-        }
-        FailureMode::ContractNotFound => {
-            (-32005, "Contract not found".to_string())
-        }
-        FailureMode::InsufficientBalance => {
-            (-32006, "Insufficient account balance".to_string())
-        }
+        FailureMode::InsufficientFee => (-32002, "Insufficient fee for transaction".to_string()),
+        FailureMode::BadAuth => (-32003, "Bad authorization for transaction".to_string()),
+        FailureMode::ContractPanic => (-32010, "Contract invocation panicked".to_string()),
+        FailureMode::ContractError { code, message } => (-32010 - *code as i64, message.clone()),
+        FailureMode::AccountNotFound => (-32004, "Account not found".to_string()),
+        FailureMode::ContractNotFound => (-32005, "Contract not found".to_string()),
+        FailureMode::InsufficientBalance => (-32006, "Insufficient account balance".to_string()),
         FailureMode::LedgerSequenceMismatch => {
             (-32007, "Ledger sequence number mismatch".to_string())
         }
-        FailureMode::BudgetExceeded => {
-            (-32008, "CPU/memory budget exceeded".to_string())
-        }
-        FailureMode::RandomFailure(_) => {
-            (-32009, "Random injected failure".to_string())
-        }
+        FailureMode::BudgetExceeded => (-32008, "CPU/memory budget exceeded".to_string()),
+        FailureMode::RandomFailure(_) => (-32009, "Random injected failure".to_string()),
     }
 }
 
@@ -363,10 +342,7 @@ mod tests {
     fn contract_filter() {
         let mut injector = FailureInjector::new();
         injector.enable();
-        injector.add_rule(
-            FailureRule::new("test", FailureMode::ContractPanic)
-                .with_contract("C1"),
-        );
+        injector.add_rule(FailureRule::new("test", FailureMode::ContractPanic).with_contract("C1"));
 
         // Wrong contract.
         let result = injector.check("simulateTransaction", Some("C2"), None, 0.5);
@@ -381,9 +357,8 @@ mod tests {
     fn probability_filter() {
         let mut injector = FailureInjector::new();
         injector.enable();
-        injector.add_rule(
-            FailureRule::new("rare", FailureMode::ContractPanic).with_probability(0.0),
-        );
+        injector
+            .add_rule(FailureRule::new("rare", FailureMode::ContractPanic).with_probability(0.0));
 
         // Probability 0.0 should never fire.
         for _ in 0..10 {
@@ -397,8 +372,7 @@ mod tests {
         let mut injector = FailureInjector::new();
         injector.enable();
         injector.add_rule(
-            FailureRule::new("limited", FailureMode::ContractPanic)
-                .with_max_activations(2),
+            FailureRule::new("limited", FailureMode::ContractPanic).with_max_activations(2),
         );
 
         assert!(injector.check("sim", None, None, 1.0).is_some());
@@ -430,9 +404,8 @@ mod tests {
     fn reset_counters() {
         let mut injector = FailureInjector::new();
         injector.enable();
-        injector.add_rule(
-            FailureRule::new("r", FailureMode::ContractPanic).with_max_activations(1),
-        );
+        injector
+            .add_rule(FailureRule::new("r", FailureMode::ContractPanic).with_max_activations(1));
         injector.check("sim", None, None, 1.0);
         assert!(injector.check("sim", None, None, 1.0).is_none());
         injector.reset_counters();

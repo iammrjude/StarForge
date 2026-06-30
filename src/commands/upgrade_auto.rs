@@ -483,7 +483,9 @@ pub fn analyse_compat(
         issues.push(CompatIssue {
             kind: "auth-removed".to_string(),
             severity: "critical".to_string(),
-            description: "Authorization guards were present in the old binary but not the new binary".to_string(),
+            description:
+                "Authorization guards were present in the old binary but not the new binary"
+                    .to_string(),
         });
     }
 
@@ -491,7 +493,8 @@ pub fn analyse_compat(
         issues.push(CompatIssue {
             kind: "identical-binary".to_string(),
             severity: "warning".to_string(),
-            description: "Old and new WASM binaries are identical; no upgrade is required".to_string(),
+            description: "Old and new WASM binaries are identical; no upgrade is required"
+                .to_string(),
         });
     }
 
@@ -541,7 +544,9 @@ pub fn analyse_compat(
             issues.push(CompatIssue {
                 kind: "migration-entrypoint-missing".to_string(),
                 severity: "warning".to_string(),
-                description: "Storage layout changed but the new ABI does not expose a `migrate` function".to_string(),
+                description:
+                    "Storage layout changed but the new ABI does not expose a `migrate` function"
+                        .to_string(),
             });
         }
     }
@@ -786,7 +791,10 @@ fn analyse_storage_layout(source: Option<&str>) -> StorageLayout {
         return StorageLayout::default();
     };
 
-    let compact = source.chars().filter(|ch| !ch.is_whitespace()).collect::<String>();
+    let compact = source
+        .chars()
+        .filter(|ch| !ch.is_whitespace())
+        .collect::<String>();
     let mut layout = StorageLayout {
         source_backed: true,
         entries: BTreeMap::new(),
@@ -1179,7 +1187,8 @@ pub fn generate_migration_script(contract: &str, compat: &CompatCheck) -> String
         }
         notes.join("\n")
     } else {
-        "//   - Provide --old-source and --new-source for richer storage migration hints".to_string()
+        "//   - Provide --old-source and --new-source for richer storage migration hints"
+            .to_string()
     };
 
     format!(
@@ -1758,9 +1767,7 @@ fn print_compat_report(compat: &CompatCheck) {
     p::separator();
     let level_str = match compat.level {
         CompatibilityLevel::Compatible => compat.level.to_string().green().to_string(),
-        CompatibilityLevel::CompatibleWithWarnings => {
-            compat.level.to_string().yellow().to_string()
-        }
+        CompatibilityLevel::CompatibleWithWarnings => compat.level.to_string().yellow().to_string(),
         CompatibilityLevel::Incompatible => compat.level.to_string().red().to_string(),
     };
     p::kv_accent("Compatibility", &level_str);
@@ -1768,7 +1775,10 @@ fn print_compat_report(compat: &CompatCheck) {
     p::kv("New hash", &compat.new_hash);
     p::kv("Old size", &format!("{} bytes", compat.old_size_bytes));
     p::kv("New size", &format!("{} bytes", compat.new_size_bytes));
-    p::kv("Size delta", &format!("{:+} bytes", compat.size_delta_bytes));
+    p::kv(
+        "Size delta",
+        &format!("{:+} bytes", compat.size_delta_bytes),
+    );
 
     println!();
     p::kv(
@@ -1785,7 +1795,10 @@ fn print_compat_report(compat: &CompatCheck) {
         p::kv("Added functions", &compat.abi.added_functions.join(", "));
     }
     if !compat.abi.removed_functions.is_empty() {
-        p::kv("Removed functions", &compat.abi.removed_functions.join(", "));
+        p::kv(
+            "Removed functions",
+            &compat.abi.removed_functions.join(", "),
+        );
     }
     if !compat.abi.changed_functions.is_empty() {
         for change in &compat.abi.changed_functions {
@@ -1857,7 +1870,10 @@ fn print_compat_report(compat: &CompatCheck) {
 
     if !compat.migration_suggestions.is_empty() {
         println!();
-        p::kv("Migration suggestions", &compat.migration_suggestions.len().to_string());
+        p::kv(
+            "Migration suggestions",
+            &compat.migration_suggestions.len().to_string(),
+        );
         for suggestion in &compat.migration_suggestions {
             println!(
                 "    [{}] {}: {}",
@@ -1905,9 +1921,8 @@ mod tests {
     use super::*;
     use std::io::Write;
     use stellar_xdr::curr::{
-        Limits, ScSpecEntry, ScSpecFunctionInputV0, ScSpecFunctionV0, ScSpecTypeDef,
-        ScSpecTypeUdt, ScSpecUdtStructFieldV0, ScSpecUdtStructV0, ScSymbol, StringM, VecM,
-        WriteXdr,
+        Limits, ScSpecEntry, ScSpecFunctionInputV0, ScSpecFunctionV0, ScSpecTypeDef, ScSpecTypeUdt,
+        ScSpecUdtStructFieldV0, ScSpecUdtStructV0, ScSymbol, StringM, VecM, WriteXdr,
     };
 
     fn mock_wasm(extra: &[u8]) -> Vec<u8> {
@@ -1995,7 +2010,11 @@ mod tests {
         wasm
     }
 
-    fn abi_function_entry(name: &str, args: Vec<(&str, ScSpecTypeDef)>, output: ScSpecTypeDef) -> ScSpecEntry {
+    fn abi_function_entry(
+        name: &str,
+        args: Vec<(&str, ScSpecTypeDef)>,
+        output: ScSpecTypeDef,
+    ) -> ScSpecEntry {
         ScSpecEntry::FunctionV0(ScSpecFunctionV0 {
             doc: empty_doc(),
             name: symbol(name),
@@ -2053,16 +2072,19 @@ mod tests {
     #[test]
     fn compat_detects_removed_abi_function() {
         let old = spec_wasm(
-            vec![abi_function_entry("increment", vec![("amount", ScSpecTypeDef::U32)], ScSpecTypeDef::U32)],
+            vec![abi_function_entry(
+                "increment",
+                vec![("amount", ScSpecTypeDef::U32)],
+                ScSpecTypeDef::U32,
+            )],
             b"",
         );
         let new = spec_wasm(vec![], b"");
         let compat = analyse_compat(&old, &new, None, None);
         assert_eq!(compat.level, CompatibilityLevel::Incompatible);
-        assert!(compat
-            .issues
-            .iter()
-            .any(|issue| issue.kind == "function-removed" && issue.description.contains("increment")));
+        assert!(compat.issues.iter().any(
+            |issue| issue.kind == "function-removed" && issue.description.contains("increment")
+        ));
     }
 
     #[test]
@@ -2083,7 +2105,10 @@ mod tests {
         );
         let compat = analyse_compat(&old, &new, None, None);
         assert_eq!(compat.level, CompatibilityLevel::Incompatible);
-        assert!(compat.issues.iter().any(|issue| issue.kind == "type-changed"));
+        assert!(compat
+            .issues
+            .iter()
+            .any(|issue| issue.kind == "type-changed"));
     }
 
     #[test]

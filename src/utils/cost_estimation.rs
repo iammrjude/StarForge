@@ -166,8 +166,7 @@ impl CostAlert {
 
     /// Returns `true` if this alert fires for the given estimate.
     pub fn fires_for(&self, estimate: &CostEstimate) -> bool {
-        let network_matches =
-            self.network == "*" || self.network == estimate.network;
+        let network_matches = self.network == "*" || self.network == estimate.network;
         network_matches && estimate.total_fee_stroops > self.threshold_stroops
     }
 }
@@ -207,15 +206,13 @@ pub fn estimate_deployment_cost(wasm_path: &Path, network: &str) -> Result<CostE
     // Large-contract surcharge
     let surcharge = if report.size_bytes > LARGE_CONTRACT_THRESHOLD_BYTES {
         let raw = gas.total_gas_stroops + storage.total_storage_stroops + BASE_TX_FEE_STROOPS;
-        ((raw as f64 * (LARGE_CONTRACT_SURCHARGE - 1.0)) as u64)
+        (raw as f64 * (LARGE_CONTRACT_SURCHARGE - 1.0)) as u64
     } else {
         0
     };
 
-    let total = BASE_TX_FEE_STROOPS
-        + gas.total_gas_stroops
-        + storage.total_storage_stroops
-        + surcharge;
+    let total =
+        BASE_TX_FEE_STROOPS + gas.total_gas_stroops + storage.total_storage_stroops + surcharge;
 
     let suggestions = generate_optimization_suggestions(&report, &gas, &storage, total);
 
@@ -258,8 +255,8 @@ fn build_storage_breakdown(report: &GasReport) -> StorageFeeBreakdown {
     let data_entries_fee = estimated_data_entries * DATA_ENTRY_COST_STROOPS;
 
     // Instance storage: base + per-byte overhead for WASM size.
-    let instance_fee = INSTANCE_STORAGE_BASE_STROOPS
-        + (wasm_bytes as u64 * STORAGE_PER_BYTE_STROOPS / 256);
+    let instance_fee =
+        INSTANCE_STORAGE_BASE_STROOPS + (wasm_bytes as u64 * STORAGE_PER_BYTE_STROOPS / 256);
 
     let total = wasm_upload_fee + instance_fee + data_entries_fee;
 
@@ -294,8 +291,7 @@ pub fn generate_optimization_suggestions(
                  and eliminate the large-contract surcharge.",
                 report.size_bytes as f64 / 1024.0
             ),
-            estimated_savings_stroops: (total_stroops as f64
-                * (LARGE_CONTRACT_SURCHARGE - 1.0)
+            estimated_savings_stroops: (total_stroops as f64 * (LARGE_CONTRACT_SURCHARGE - 1.0)
                 / LARGE_CONTRACT_SURCHARGE) as u64,
         });
     }
@@ -350,7 +346,10 @@ pub fn generate_optimization_suggestions(
 
     // Propagate suggestions from the existing optimizer report.
     for s in &report.suggestions {
-        if !suggestions.iter().any(|existing| existing.message.contains(s.as_str())) {
+        if !suggestions
+            .iter()
+            .any(|existing| existing.message.contains(s.as_str()))
+        {
             suggestions.push(CostOptimizationSuggestion {
                 category: "general".to_string(),
                 message: s.clone(),
@@ -360,7 +359,10 @@ pub fn generate_optimization_suggestions(
     }
 
     // Sort by potential savings descending.
-    suggestions.sort_by(|a, b| b.estimated_savings_stroops.cmp(&a.estimated_savings_stroops));
+    suggestions.sort_by(|a, b| {
+        b.estimated_savings_stroops
+            .cmp(&a.estimated_savings_stroops)
+    });
     suggestions
 }
 
@@ -387,8 +389,7 @@ pub fn compare_costs(baseline: &CostEstimate, candidate: &CostEstimate) -> CostC
     } else if regression {
         format!(
             "Regression — candidate is {:.1}% more expensive ({} stroops added)",
-            delta_percent,
-            delta
+            delta_percent, delta
         )
     } else if delta > 0 {
         format!(
@@ -708,6 +709,9 @@ mod tests {
         let wasm = write_wasm(tmp.path(), "big.wasm", big);
         let est = estimate_deployment_cost(&wasm, "testnet").unwrap();
         let has_size_suggestion = est.suggestions.iter().any(|s| s.category == "size");
-        assert!(has_size_suggestion, "large contract should have a size suggestion");
+        assert!(
+            has_size_suggestion,
+            "large contract should have a size suggestion"
+        );
     }
 }

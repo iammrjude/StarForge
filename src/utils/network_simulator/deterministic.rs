@@ -3,10 +3,10 @@
 //! Provides seeded pseudo-random number generation and deterministic
 //! parameters so that simulations produce identical results across runs.
 
-use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
-use sha2::{Sha256, Digest};
+use rand::{Rng, SeedableRng};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::sync::Mutex;
 
 // ── Deterministic Configuration ───────────────────────────────────────────────
@@ -39,6 +39,7 @@ impl Default for DeterministicConfig {
 ///
 /// All random decisions in the simulator go through this type so that they
 /// are reproducible when the same seed is used.
+#[derive(Debug)]
 pub struct SeededRng {
     inner: Mutex<StdRng>,
     seed: u64,

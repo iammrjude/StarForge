@@ -90,9 +90,13 @@ pub fn map_signing_error(err: anyhow::Error, kind: HardwareWalletKind) -> anyhow
     let message = err.to_string().to_lowercase();
     let remediation = if message.contains("timeout") || message.contains("timed out") {
         "Ensure the device is unlocked, the Stellar app is open, and approve the prompt on-screen. Retry when ready."
-    } else if message.contains("not found") || message.contains("no ledger") || message.contains("no trezor") {
+    } else if message.contains("not found")
+        || message.contains("no ledger")
+        || message.contains("no trezor")
+    {
         "Connect the device via USB, unlock it, open the Stellar app, then retry."
-    } else if message.contains("reject") || message.contains("denied") || message.contains("cancel") {
+    } else if message.contains("reject") || message.contains("denied") || message.contains("cancel")
+    {
         "The request was rejected on the device. Review the transaction details and approve to continue."
     } else if message.contains("status") || message.contains("apdu") {
         "Close other wallet apps, reopen the Stellar app on the device, and retry the operation."
@@ -149,7 +153,10 @@ pub fn device_status(kind: HardwareWalletKind) -> Result<String> {
 }
 
 #[cfg(feature = "hardware-wallet")]
-pub fn connect_with_timeout(kind: HardwareWalletKind, timeout: std::time::Duration) -> Result<HardwareWalletInfo> {
+pub fn connect_with_timeout(
+    kind: HardwareWalletKind,
+    timeout: std::time::Duration,
+) -> Result<HardwareWalletInfo> {
     match kind {
         HardwareWalletKind::Ledger => {
             let transport = LedgerTransport::connect_with_timeout(timeout)?;

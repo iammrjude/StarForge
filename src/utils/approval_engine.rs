@@ -190,7 +190,7 @@ pub fn create_workflow(
         active: true,
     };
 
-    workflows.push(workflow);
+    workflows.push(workflow.clone());
     save_workflows_raw(&workflows)?;
     Ok(workflow)
 }
@@ -281,7 +281,7 @@ pub fn create_request(
         metadata,
     };
 
-    requests.push(request);
+    requests.push(request.clone());
     save_requests_raw(&requests)?;
     Ok(request)
 }
@@ -316,7 +316,7 @@ fn process_expired_requests() -> Result<Vec<ApprovalRequest>> {
         }
         if let Some(ref expiry) = req.expires_at {
             if let Ok(exp_dt) = chrono::DateTime::parse_from_rfc3339(expiry) {
-                if now > chrono::DateTime::from(exp_dt) {
+                if now > exp_dt.with_timezone(&Utc) {
                     req.status = ApprovalStatus::Expired;
                     req.updated_at = now.to_rfc3339();
                     changed = true;

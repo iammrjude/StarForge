@@ -24,7 +24,7 @@ pub enum DependencySource {
         git: Option<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
         branch: Option<String>,
-    }
+    },
 }
 
 impl DependencySource {
@@ -34,7 +34,9 @@ impl DependencySource {
                 let req = VersionReq::parse(v).context("Invalid version requirement")?;
                 Ok(Some(req))
             }
-            Self::Detailed { version: Some(v), .. } => {
+            Self::Detailed {
+                version: Some(v), ..
+            } => {
                 let req = VersionReq::parse(v).context("Invalid version requirement")?;
                 Ok(Some(req))
             }
@@ -171,7 +173,13 @@ pub fn resolve_deployment_order(graph: &DependencyGraph) -> Result<Vec<String>> 
 
     for node in &graph.nodes {
         if node != "root" {
-            topological_sort(node, &graph.edges, &mut visited, &mut temp_visited, &mut sorted)?;
+            topological_sort(
+                node,
+                &graph.edges,
+                &mut visited,
+                &mut temp_visited,
+                &mut sorted,
+            )?;
         }
     }
 

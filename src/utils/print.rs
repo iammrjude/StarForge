@@ -48,7 +48,11 @@ pub fn cli_error(err: &anyhow::Error, hints: &[&str]) {
     let chain: Vec<_> = err.chain().skip(1).collect();
     if !chain.is_empty() {
         for cause in &chain {
-            eprintln!("     {} {}", "Context:".dimmed(), cause.to_string().dimmed());
+            eprintln!(
+                "     {} {}",
+                "Context:".dimmed(),
+                cause.to_string().dimmed()
+            );
         }
         eprintln!();
     }

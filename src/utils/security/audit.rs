@@ -793,8 +793,11 @@ mod tests {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let path =
-            std::env::temp_dir().join(format!("sf_audit_test_{}_{}.rs", std::process::id(), unique));
+        let path = std::env::temp_dir().join(format!(
+            "sf_audit_test_{}_{}.rs",
+            std::process::id(),
+            unique
+        ));
         let mut f = std::fs::File::create(&path).unwrap();
         f.write_all(src.as_bytes()).unwrap();
         path
@@ -812,7 +815,9 @@ mod tests {
         std::fs::remove_file(&path).ok();
 
         assert!(
-            findings.iter().any(|f| f.id == "SF-PATTERN-REENTRANCY-RISK"),
+            findings
+                .iter()
+                .any(|f| f.id == "SF-PATTERN-REENTRANCY-RISK"),
             "expected reentrancy to be detected offline, got: {:?}",
             findings.iter().map(|f| f.id.clone()).collect::<Vec<_>>()
         );
@@ -825,7 +830,11 @@ mod tests {
                 "missing line in location for {}",
                 f.id
             );
-            assert!(!f.remediation.is_empty(), "missing remediation for {}", f.id);
+            assert!(
+                !f.remediation.is_empty(),
+                "missing remediation for {}",
+                f.id
+            );
             assert_eq!(f.tool, "starforge-builtin");
         }
     }

@@ -146,7 +146,8 @@ impl ContractTestRunner {
         }
 
         for h in handles {
-            h.join().map_err(|_| anyhow::anyhow!("Worker thread panicked"))?;
+            h.join()
+                .map_err(|_| anyhow::anyhow!("Worker thread panicked"))?;
         }
 
         let collected = results.lock().unwrap().clone();
@@ -191,7 +192,9 @@ fn build_hints(cases: &[RunnerCaseResult]) -> Vec<FailureHint> {
                 category: category.into(),
                 suggestion: match category {
                     "authorization" => "Add require_auth() or validate caller permissions".into(),
-                    "input-validation" => "Validate inputs with explicit guards at function entry".into(),
+                    "input-validation" => {
+                        "Validate inputs with explicit guards at function entry".into()
+                    }
                     _ => "Review test output and contract logic".into(),
                 },
             }

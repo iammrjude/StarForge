@@ -126,8 +126,6 @@ fn discover_methods(args: &ShellArgs) -> Vec<String> {
     methods
 }
 
-
-
 fn completion_candidates() -> Vec<String> {
     let mut candidates = HashSet::new();
 

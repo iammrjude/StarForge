@@ -121,22 +121,20 @@ pub fn prompt_hardware_confirmation(
 
     p::info(&format!(
         "Connect your {} and approve the {} on the device screen.",
-        kind, operation_label.to_lowercase()
+        kind,
+        operation_label.to_lowercase()
     ));
     Ok(())
 }
 
 /// Resolve a plaintext secret key from a wallet entry, decrypting when needed.
 pub fn resolve_local_secret(wallet: &config::WalletEntry, wallet_name: &str) -> Result<String> {
-    let sk = wallet
-        .secret_key
-        .as_ref()
-        .ok_or_else(|| {
-            anyhow::anyhow!(
-                "Wallet '{}' has no local secret key. Use --hardware ledger or --hardware trezor.",
-                wallet_name
-            )
-        })?;
+    let sk = wallet.secret_key.as_ref().ok_or_else(|| {
+        anyhow::anyhow!(
+            "Wallet '{}' has no local secret key. Use --hardware ledger or --hardware trezor.",
+            wallet_name
+        )
+    })?;
 
     if !sk.contains(':') && sk.starts_with('S') && sk.len() == 56 {
         return Ok(sk.clone());
@@ -146,8 +144,12 @@ pub fn resolve_local_secret(wallet: &config::WalletEntry, wallet_name: &str) -> 
         &format!("Enter password to decrypt wallet '{}'", wallet_name),
         false,
     )?;
-    crypto::decrypt_secret(&pwd, sk)
-        .map_err(|_| anyhow::anyhow!("Incorrect password or unable to decrypt wallet '{}'.", wallet_name))
+    crypto::decrypt_secret(&pwd, sk).map_err(|_| {
+        anyhow::anyhow!(
+            "Incorrect password or unable to decrypt wallet '{}'.",
+            wallet_name
+        )
+    })
 }
 
 /// Sign a base64-encoded transaction XDR using local or hardware credentials.
@@ -155,13 +157,9 @@ pub fn sign_transaction_xdr(transaction_xdr: &str, request: &SigningRequest) -> 
     if let Some(kind) = request.hardware {
         let tx_bytes = decode_transaction_bytes(transaction_xdr)?;
         let passphrase = config::get_network_passphrase(&request.network);
-        let signature = hardware_wallet::sign_transaction(
-            kind,
-            &request.hd_path,
-            &tx_bytes,
-            &passphrase,
-        )
-        .map_err(|err| hardware_wallet::map_signing_error(err, kind))?;
+        let signature =
+            hardware_wallet::sign_transaction(kind, &request.hd_path, &tx_bytes, &passphrase)
+                .map_err(|err| hardware_wallet::map_signing_error(err, kind))?;
 
         let signed = format!(
             "hw_signed_{}_{}_{}",
@@ -212,7 +210,10 @@ mod tests {
 
     #[test]
     fn local_signing_request_produces_encoded_xdr() {
-        let request = SigningRequest::local_secret("SABCDEFGHIJKLMNOPQRSTUVWXYZ012345678901234567890".to_string(), "testnet");
+        let request = SigningRequest::local_secret(
+            "SABCDEFGHIJKLMNOPQRSTUVWXYZ012345678901234567890".to_string(),
+            "testnet",
+        );
         let signed = sign_transaction_xdr("mock_tx_payload", &request).unwrap();
         assert!(!signed.is_empty());
         let decoded = general_purpose::STANDARD.decode(signed).unwrap();
@@ -233,7 +234,9 @@ mod tests {
         assert!(result.is_err());
         let message = result.unwrap_err().to_string().to_lowercase();
         assert!(
-            message.contains("hardware") || message.contains("ledger") || message.contains("disabled"),
+            message.contains("hardware")
+                || message.contains("ledger")
+                || message.contains("disabled"),
             "unexpected error: {}",
             message
         );

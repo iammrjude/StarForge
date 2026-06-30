@@ -146,10 +146,11 @@ impl PluginManager {
         let path_display = path_ref.to_string_lossy().to_string();
 
         // ── Open the shared library ──────────────────────────────────────────
-        let library = Library::new(path_ref.as_os_str()).map_err(|e| PluginLoadError::InvalidLibrary {
-            path: path_display.clone(),
-            detail: e.to_string(),
-        })?;
+        let library =
+            Library::new(path_ref.as_os_str()).map_err(|e| PluginLoadError::InvalidLibrary {
+                path: path_display.clone(),
+                detail: e.to_string(),
+            })?;
         let library = Rc::new(library);
 
         // ── Locate the required export symbol ────────────────────────────────
@@ -191,7 +192,7 @@ impl PluginManager {
         }
 
         let mut registrar = ProxyRegistrar::new();
-        
+
         // Protect the system execution loop from third-party registration panics
         let register_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             (decl.register)(&mut registrar);

@@ -188,7 +188,10 @@ const COMMANDS: &[CmdEntry] = &[
         name: "upgrade",
         about: "Contract upgrade management, compatibility checks, and rollback",
         subs: &[
-            ("auto", "Run upgrade compatibility checks and migration planning"),
+            (
+                "auto",
+                "Run upgrade compatibility checks and migration planning",
+            ),
             ("propose", "Propose a contract upgrade"),
             ("approve", "Approve a pending upgrade"),
             ("execute", "Execute an approved upgrade"),

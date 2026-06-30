@@ -336,21 +336,31 @@ fn recovery_hints(command: &str, err: &anyhow::Error) -> Vec<String> {
                 hints.push("Build your contract first: stellar contract build".into());
                 hints.push("Make sure you pass the correct --wasm path to deploy.".into());
             } else if msg.contains("account") || msg.contains("not found on") {
-                hints.push("Fund your account before deploying: starforge wallet fund <name>".into());
+                hints.push(
+                    "Fund your account before deploying: starforge wallet fund <name>".into(),
+                );
                 hints.push("Check the active network: starforge network show".into());
             } else if msg.contains("network") {
                 hints.push("Check available networks: starforge network show".into());
-                hints.push("Switch to testnet for free deployments: starforge network switch testnet".into());
+                hints.push(
+                    "Switch to testnet for free deployments: starforge network switch testnet"
+                        .into(),
+                );
             }
         }
         "contract" => {
             if msg.contains("no wallet") || msg.contains("wallet not found") {
                 hints.push("Create a wallet first: starforge wallet create deployer --fund".into());
             } else if msg.contains("contract id") || msg.contains("invalid contract") {
-                hints.push("Contract IDs start with 'C' and are exactly 56 characters long.".into());
-                hints.push("Find your contract ID in the deploy output or: starforge contract list".into());
+                hints
+                    .push("Contract IDs start with 'C' and are exactly 56 characters long.".into());
+                hints.push(
+                    "Find your contract ID in the deploy output or: starforge contract list".into(),
+                );
             } else if msg.contains("invoke") || msg.contains("simulate") {
-                hints.push("Run `stellar contract build` to ensure the contract is up to date.".into());
+                hints.push(
+                    "Run `stellar contract build` to ensure the contract is up to date.".into(),
+                );
                 hints.push("Check function name and argument types match the contract ABI.".into());
             }
         }
@@ -362,34 +372,47 @@ fn recovery_hints(command: &str, err: &anyhow::Error) -> Vec<String> {
                 hints.push("Check your XLM balance: starforge wallet show <name>".into());
                 hints.push("Fund the account: starforge wallet fund <name>".into());
             } else if msg.contains("asset") {
-                hints.push("Asset format is CODE:ISSUER (e.g. USDC:GA5ZS...) or XLM for native.".into());
+                hints.push(
+                    "Asset format is CODE:ISSUER (e.g. USDC:GA5ZS...) or XLM for native.".into(),
+                );
             }
         }
         "network" => {
             if msg.contains("unsupported") || msg.contains("not found") {
                 hints.push("List configured networks: starforge network show".into());
-                hints.push("Add a custom network: starforge network add <name> --horizon <url>".into());
+                hints.push(
+                    "Add a custom network: starforge network add <name> --horizon <url>".into(),
+                );
                 hints.push("Valid built-in networks: testnet, mainnet, docker-testnet".into());
             }
         }
         "node" => {
             if msg.contains("docker") || msg.contains("not found") || msg.contains("command") {
-                hints.push("Install Docker Desktop from https://www.docker.com/products/docker-desktop".into());
+                hints.push(
+                    "Install Docker Desktop from https://www.docker.com/products/docker-desktop"
+                        .into(),
+                );
                 hints.push("Ensure the Docker daemon is running before retrying.".into());
             }
         }
         "config" => {
             if msg.contains("parse") || msg.contains("toml") || msg.contains("json") {
                 hints.push("Your config file may be corrupted. Inspect it at: ~/.config/starforge/config.toml".into());
-                hints.push("Run `starforge config doctor` to diagnose configuration issues.".into());
+                hints
+                    .push("Run `starforge config doctor` to diagnose configuration issues.".into());
             }
         }
         "plugin" => {
             if msg.contains("not found") || msg.contains("load") {
-                hints.push("Re-install the plugin: starforge plugin install <name> --path <lib>".into());
+                hints.push(
+                    "Re-install the plugin: starforge plugin install <name> --path <lib>".into(),
+                );
                 hints.push("List installed plugins: starforge plugin list".into());
             } else if msg.contains("untrusted") || msg.contains("trust") {
-                hints.push("Review the plugin source and mark it trusted: starforge plugin trust <name>".into());
+                hints.push(
+                    "Review the plugin source and mark it trusted: starforge plugin trust <name>"
+                        .into(),
+                );
             }
         }
         "template" => {

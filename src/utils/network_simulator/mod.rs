@@ -22,27 +22,21 @@
 //! // Deploy a contract, invoke it, inspect state…
 //! ```
 
-pub mod simulator;
 pub mod deterministic;
-pub mod state;
-pub mod time;
 pub mod failure;
 pub mod scenarios;
+pub mod simulator;
+pub mod state;
+pub mod time;
 
 // ── Re-exports for convenience ────────────────────────────────────────────────
 
-pub use simulator::{
-    NetworkSimulator,
-    SimulatorConfig,
-    SimulatorMode,
-    AccountInfo,
-    ContractInstance,
-    LedgerInfo,
-    TransactionReceipt,
-    SimulationOutcome,
-};
 pub use deterministic::{DeterministicConfig, SeededRng};
-pub use state::{StateSnapshot, SnapshotManager};
-pub use time::{TimeController, LedgerTime};
 pub use failure::{FailureInjector, FailureMode, FailureRule};
-pub use scenarios::{Scenario, ScenarioRunner, BuiltInScenario};
+pub use scenarios::{BuiltInScenario, Scenario, ScenarioRunner};
+pub use simulator::{
+    AccountInfo, ContractInstance, LedgerInfo, NetworkSimulator, SimulationOutcome,
+    SimulatorConfig, SimulatorMode, TransactionReceipt,
+};
+pub use state::{SnapshotManager, StateSnapshot};
+pub use time::{LedgerTime, TimeController};

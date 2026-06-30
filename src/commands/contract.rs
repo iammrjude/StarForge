@@ -1,8 +1,8 @@
+use crate::utils::hardware_wallet::HardwareWalletKind;
 use crate::utils::{bindings, call_graph, config, print as p, soroban, wallet_signer};
 use anyhow::Result;
 use clap::{Args, Subcommand, ValueEnum};
 use colored::*;
-use crate::utils::hardware_wallet::HardwareWalletKind;
 use std::path::PathBuf;
 
 #[derive(Subcommand)]
@@ -676,7 +676,7 @@ fn handle_call_graph(args: CallGraphArgs) -> Result<()> {
 fn handle_deps(args: DepsArgs) -> Result<()> {
     use crate::utils::contract_deps;
     let cwd = std::env::current_dir()?;
-    
+
     match args.cmd {
         DepsCommands::Init => {
             contract_deps::init(&cwd)?;
@@ -695,13 +695,16 @@ fn handle_deps(args: DepsArgs) -> Result<()> {
             } else {
                 anyhow::bail!("Must specify at least --version, --path, or --git");
             };
-            
+
             contract_deps::add_dependency(&cwd, &add_args.name, source)?;
             p::success(&format!("Added dependency '{}'", add_args.name));
         }
         DepsCommands::Update(update_args) => {
             contract_deps::update_dependency(&cwd, &update_args.name, &update_args.version)?;
-            p::success(&format!("Updated dependency '{}' to '{}'", update_args.name, update_args.version));
+            p::success(&format!(
+                "Updated dependency '{}' to '{}'",
+                update_args.name, update_args.version
+            ));
         }
         DepsCommands::Resolve => {
             p::header("Contract Dependency Deployment Order");
@@ -729,6 +732,6 @@ fn handle_deps(args: DepsArgs) -> Result<()> {
             }
         }
     }
-    
+
     Ok(())
 }
