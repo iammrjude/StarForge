@@ -1,5 +1,6 @@
 pub mod analytics;
 pub mod backup;
+pub mod bridge;
 pub mod benchmark;
 pub mod command_tree;
 pub mod completions;
@@ -27,6 +28,7 @@ pub mod registry;
 pub mod schedule;
 pub mod security;
 pub mod shell;
+pub mod simulate;
 pub mod social;
 pub mod telemetry;
 pub mod template;

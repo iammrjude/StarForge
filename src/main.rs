@@ -159,6 +159,18 @@ enum Commands {
     #[command(subcommand)]
     Analytics(commands::analytics::AnalyticsCommands),
 
+    /// Local network simulation for deterministic Soroban testing
+    #[command(subcommand)]
+    Simulate(commands::simulate::SimulateCommands),
+
+    /// Cross-chain bridge operations
+    #[command(subcommand)]
+    Bridge(commands::bridge::BridgeCommands),
+
+    /// Formal verification for Soroban contracts
+    #[command(subcommand)]
+    Verify(commands::verify::VerifyCommands),
+
     /// Execute an installed plugin command (e.g. `starforge defi ...`)
     #[command(external_subcommand)]
     External(Vec<String>),
@@ -214,6 +226,9 @@ async fn main() {
         Commands::Perf(_) => "perf",
         Commands::Docs(_) => "docs",
         Commands::Analytics(_) => "analytics",
+        Commands::Simulate(_) => "simulate",
+        Commands::Bridge(_) => "bridge",
+        Commands::Verify(_) => "verify",
         Commands::External(_) => "external",
     }
     .to_string();
@@ -254,6 +269,9 @@ async fn main() {
         Commands::Perf(cmd) => commands::perf::handle(cmd).await,
         Commands::Docs(cmd) => commands::docs::handle(cmd).await,
         Commands::Analytics(cmd) => commands::analytics::handle(cmd).await,
+        Commands::Simulate(cmd) => commands::simulate::handle(cmd).await,
+        Commands::Bridge(cmd) => commands::bridge::handle(cmd).await,
+        Commands::Verify(cmd) => commands::verify::handle(cmd).await,
         Commands::External(args) => handle_external_plugin(args),
     };
     let duration = start.elapsed();
